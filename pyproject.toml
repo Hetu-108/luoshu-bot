@@ -1,5 +1,5 @@
 [project]
-name = "shushubot"
+name = "luoshu-bot"
 version = "1.0.0"
 description = "洛书 bot - 基于 nonebot2 的 QQ 群机器人"
 authors = []

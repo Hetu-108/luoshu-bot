@@ -29,7 +29,7 @@
 
 [Unit]
 Description=Luoshu QQ Bot (nonebot2 + OneBot v11)
-Documentation=file:///path/to/鼠鼠bot/使用说明.txt
+Documentation=file:///path/to/洛书bot/使用说明.txt
 After=network-online.target
 Wants=network-online.target
 # 若同机运行 Ollama，取消下面两行的注释（服务名以你实际的为准）
