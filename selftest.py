@@ -22,7 +22,11 @@ nonebot.load_from_toml("pyproject.toml")
 
 SELF_ID = "10000"
 GROUP_ID = 123456
-USER_ID = 1104979286
+
+# 管理员 QQ 从配置读取（.env 的 SUPERUSERS），不把真实 QQ 写死在源码里。
+# 新用户复制 .env.example 后无需改这里，测试会自动对上自己的配置。
+_superusers = sorted(getattr(driver.config, "superusers", []) or [])
+USER_ID = int(_superusers[0]) if _superusers else 10000000
 
 
 class FakeBot(Bot):
@@ -127,7 +131,7 @@ async def main():
     await send("/河图", note="洛书心事卡")
     await send("/河图", user_id=99999999, note="非河图应被拒")
     await send("麻花", user_id=99999999, note="非河图打招呼应无响应")
-    await send("/河图", user_id=2743218818, note="登录QQ（非河图）同样应被拒")
+    await send("/河图", user_id=88888888, note="非管理员 QQ 同样应被拒")
 
     print("\n========== 喊名字对话（所有人可用）==========")
     await send("洛书 你好呀", user_id=55555555, note="普通成员喊名字应能聊天")
