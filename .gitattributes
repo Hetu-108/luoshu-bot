@@ -1,0 +1,22 @@
+# 统一换行符，避免跨平台协作时 Linux 脚本被转成 CRLF
+# （CRLF 的 .sh 在 Linux 上会报 "bad interpreter: /bin/bash^M"）
+
+* text=auto eol=lf
+
+# Windows 批处理必须保留 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Linux 脚本 / 服务文件强制 LF
+*.sh text eol=lf
+*.service text eol=lf
+*.service.example text eol=lf
+*.example text eol=lf
+
+# 二进制文件不要动
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

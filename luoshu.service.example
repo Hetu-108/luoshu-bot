@@ -1,0 +1,72 @@
+# ============================================
+#  洛书 bot —— systemd 服务文件（模板）
+# ============================================
+#
+# 作用：让 bot 开机自启、崩溃自动重启、日志交给 journalctl 管理。
+#
+# 使用步骤（在 Linux 上）：
+#   1. 先按项目说明装好依赖： ./install.sh
+#   2. 把本文件复制成正式服务（需要 sudo）：
+#        sudo cp luoshu.service.example /etc/systemd/system/luoshu.service
+#   3. 按实际情况修改下面三处：
+#        - User / Group      运行 bot 的用户（建议专用账号，别用 root）
+#        - WorkingDirectory  项目绝对路径
+#        - ExecStart         项目里 .venv 的 python 绝对路径
+#   4. 重新加载并启用：
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable --now luoshu
+#   5. 查看状态 / 日志：
+#        systemctl status luoshu
+#        journalctl -u luoshu -f
+#
+# 常用操作：
+#        sudo systemctl restart luoshu    重启
+#        sudo systemctl stop luoshu       停止
+#        sudo systemctl disable luoshu    取消开机自启
+#
+# 注意：如果 Ollama 也在这台机器上，建议给 Ollama 也配一个 systemd 服务，
+#       并让本服务在它之后启动（见下方 After=/Wants=）。
+
+[Unit]
+Description=Luoshu QQ Bot (nonebot2 + OneBot v11)
+Documentation=file:///path/to/鼠鼠bot/使用说明.txt
+After=network-online.target
+Wants=network-online.target
+# 若同机运行 Ollama，取消下面两行的注释（服务名以你实际的为准）
+# After=ollama.service
+# Wants=ollama.service
+
+[Service]
+Type=simple
+
+# ===== 需要修改：运行 bot 的用户与项目路径 =====
+User=luoshu
+Group=luoshu
+WorkingDirectory=/opt/luoshu-bot
+ExecStart=/opt/luoshu-bot/.venv/bin/python /opt/luoshu-bot/bot.py
+
+# 崩溃后自动重启（5 秒后重试）
+Restart=always
+RestartSec=5
+
+# 停止时先发 SIGINT，让 nonebot 优雅退出
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# 日志级别与环境变量（可在 .env 里覆盖）
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONIOENCODING=utf-8
+
+# 日志交给 journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=luoshu
+
+# ===== 安全加固（可选，按需放宽）=====
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

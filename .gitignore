@@ -1,0 +1,47 @@
+# ===== 虚拟环境（不可跨系统，必须各自重建）=====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== 敏感配置：真实 QQ 号、群号在这里，绝对不要上传 =====
+.env
+.env.prod
+.env.local
+*.local.env
+
+# ===== 运行数据：聊天记录、用户 QQ、统计数据 =====
+# 整个目录排除，但保留目录结构（.gitkeep）与自带词库
+data/*
+!data/.gitkeep
+!data/sensitive_words.txt
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ===== 日志 =====
+*.log
+luoshu.log
+logs/
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+*.orig
+~$*
