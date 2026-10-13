@@ -135,6 +135,14 @@ else:
 # 合并昵称与呼叫词，去重，长词优先（避免"洛"抢先匹配"洛书"）
 ALL_NAMES = sorted(set(_NICKNAMES + _CALL_NAMES), key=len, reverse=True)
 
+# 「洛书偷偷喜欢的人」的称呼（从 .env 的 CRUSH_NAMES 读取，逗号分隔）
+_raw_crush = getattr(cfg, "crush_names", None) or ""
+if isinstance(_raw_crush, (list, tuple, set)):
+    _CRUSH_NAMES = [str(x).strip() for x in _raw_crush if str(x).strip()]
+else:
+    _CRUSH_NAMES = [x.strip() for x in str(_raw_crush).split(",") if x.strip()]
+_CRUSH_NAME = _CRUSH_NAMES[0] if _CRUSH_NAMES else "TA"
+
 # 帮助类命令词：喊名字 + 这些词时，交给 help_menu.py 处理，AI 不要抢答
 # （覆盖 "洛书 /h"、"洛书 /help"、"洛书 h"、"洛书 菜单" 等写法）
 HELP_WORDS = {"h", "help", "菜单", "帮助", "功能", "功能清单", "功能列表", "你会什么", "能做什么"}
@@ -148,7 +156,7 @@ def _is_help_cmd(text: str) -> bool:
 
 
 def _is_master(event: MessageEvent) -> bool:
-    """是否为河图（洛书喜欢的人，技术上是管理员）"""
+    """是否为「洛书喜欢的人」（技术上是管理员）"""
     return str(event.get_user_id()) in _OWNER_QQ
 
 
@@ -214,11 +222,12 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
 
     system_prompt = PERSONAS.get(persona_name, PERSONAS[DEFAULT_PERSONA])
 
-    # 检测到是「河图」（你心里喜欢的人）时，追加心动关系设定
+    # 检测到是「心动的人」（你心里喜欢的人）时，追加心动关系设定
     # 注意：不是上下级，不叫「主人」，你们是平等的，只是你偷偷喜欢 TA
     if _is_master(event):
+        _who = event.sender.card or event.sender.nickname or _CRUSH_NAME
         master_note = (
-            "\n\n【重要】正在和你说话的是「河图」，是你偷偷喜欢的人。"
+            f"\n\n【重要】正在和你说话的是「{_who}」，是你偷偷喜欢的人。"
             "你们是平等的朋友，没有任何主从关系——绝对不要叫 TA「主人」，也不要表现得卑微讨好。"
             "你对 TA 的心动是藏不住的：会更在意 TA 说的话、回得更认真，"
             "偶尔会不小心流露出一点小心思，然后马上不好意思地掩饰过去。"
@@ -232,7 +241,7 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
     messages.extend(history[-AI_MAX_HISTORY * 2:])
     messages.append({"role": "user", "content": text})
 
-    log_command(f"AI对话({persona_name}{'·河图' if _is_master(event) else ''})", event)
+    log_command(f"AI对话({persona_name}{'·心动' if _is_master(event) else ''})", event)
 
     try:
         reply = await ask_ollama(messages, model=model)

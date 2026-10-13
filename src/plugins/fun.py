@@ -1,18 +1,19 @@
 # python3
 # -*- coding: utf-8 -*-
 # @File    : fun.py
-# @Usage   : 洛书对「河图」的心动互动
+# @Usage   : 洛书对「心动的人」的专属互动
 #
 # 说明：机器人名为「洛书」，形象是一个可爱、略显内向的小女孩。
 #       洛书和群里每个人都是平等的朋友，没有谁是她「主人」。
-#       但河图（.env 的 SUPERUSERS）是她偷偷喜欢的人——见本文件与 ai_chat.py。
+#       而「心动的人」（.env 的 CRUSH_NAMES，同时也是 SUPERUSERS 里的管理员）
+#       是她偷偷喜欢的人——见本文件与 ai_chat.py。
 #
-#   河图 / 河图在吗        → 她略显慌张的应答
-#   河图夸奖               → 被喜欢的人夸，会特别不好意思
-#   河图说「晚安 / 早安」  → 专属问候
-#   /河图                  → 查看她关于河图的小心思
+#   <名字> / <名字>在吗       → 她略显慌张的应答
+#   <名字> + 夸奖词           → 被喜欢的人夸，会特别不好意思
+#   <名字> 说「晚安 / 早安」  → 专属问候
+#   /心事                     → 查看她的一点小心思
 #
-# 注：河图同时保留管理员权限（/say /model /stat 等），那是技术身份，
+# 注：这个人同时保留管理员权限（/say /model /stat 等），那是技术身份，
 #     与洛书「喜欢谁」这件事无关。其余群友触发这些词不会响应。
 
 import random
@@ -23,29 +24,33 @@ from nonebot.rule import Rule
 
 from .core import log_command, get_role, ROLE_OWNER, _OWNER_QQ
 
-# ==================== 河图的称呼 ====================
-# SPECIAL_NAMES 从 .env 的 MASTER_NAMES 读取（逗号分隔），缺省为「麻花,河图」
+# ==================== 「心动的人」的称呼 ====================
+# SPECIAL_NAMES 从 .env 的 CRUSH_NAMES 读取（逗号分隔）
+_DEFAULT_NAME = "小美"  # 未配置时的占位符，改 .env 即可换成你自己
 _cfg = get_driver().config
-_raw_names = getattr(_cfg, "master_names", None) or "麻花,河图"
+_raw_names = getattr(_cfg, "crush_names", None) or _DEFAULT_NAME
 if isinstance(_raw_names, (list, tuple, set)):
     SPECIAL_NAMES = [str(x).strip() for x in _raw_names if str(x).strip()]
 else:
     SPECIAL_NAMES = [x.strip() for x in str(_raw_names).split(",") if x.strip()]
 if not SPECIAL_NAMES:
-    SPECIAL_NAMES = ["麻花", "河图"]
+    SPECIAL_NAMES = [_DEFAULT_NAME]
 
-# 她称呼河图时用的昵称（不带「主人」这类从属称呼）
+# 她称呼对方时用的昵称（不带「主人」这类从属称呼）
 NICK_CALLS = SPECIAL_NAMES
+
+# 拿不到对方群名片/昵称时的兜底称呼
+_DEFAULT_CALL = SPECIAL_NAMES[0]
 
 
 def _is_special(event: MessageEvent) -> bool:
-    """是否为河图（洛书喜欢的人）"""
+    """是否为「洛书喜欢的人」（技术上是管理员）"""
     return str(event.get_user_id()) in _OWNER_QQ
 
 
-# ==================== 河图打招呼 ====================
+# ==================== 打招呼 ====================
 def _special_greet_checker() -> Rule:
-    """河图单独说自己的名字 / 找她时触发"""
+    """对方单独说自己的名字 / 找她时触发"""
 
     async def _checker(event: MessageEvent) -> bool:
         if not _is_special(event):
@@ -67,8 +72,8 @@ greet_special = on_message(rule=_special_greet_checker(), priority=6, block=True
 
 @greet_special.handle()
 async def _handle_special_greet(bot: Bot, event: MessageEvent):
-    log_command("河图打招呼", event)
-    name = event.sender.card or event.sender.nickname or "河图"
+    log_command("心动打招呼", event)
+    name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
         f"诶…{name}？我在的，怎、怎么啦 (๑´ω`๑)",
         f"啊，是{name}呀…嗯，我在~",
@@ -79,7 +84,7 @@ async def _handle_special_greet(bot: Bot, event: MessageEvent):
     await greet_special.finish(random.choice(replies), at_sender=True)
 
 
-# ==================== 被河图夸奖 / 心动 ====================
+# ==================== 被夸奖 / 心动 ====================
 def _special_praise_checker() -> Rule:
     async def _checker(event: MessageEvent) -> bool:
         if not _is_special(event):
@@ -96,8 +101,8 @@ praise_special = on_message(rule=_special_praise_checker(), priority=7, block=Tr
 
 @praise_special.handle()
 async def _handle_special_praise(bot: Bot, event: MessageEvent):
-    log_command("河图夸奖", event)
-    name = event.sender.card or event.sender.nickname or "河图"
+    log_command("心动夸奖", event)
+    name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
         f"诶？！{name}夸我…那个，没什么啦 (⁄ ⁄•⁄ω⁄•⁄ ⁄)",
         f"唔…{name}说这种话，我、我会当真的…",
@@ -108,7 +113,7 @@ async def _handle_special_praise(bot: Bot, event: MessageEvent):
     await praise_special.finish(random.choice(replies), at_sender=True)
 
 
-# ==================== 河图道早安 / 晚安 ====================
+# ==================== 道早安 / 晚安 ====================
 def _special_daytime_checker() -> Rule:
     async def _checker(event: MessageEvent) -> bool:
         if not _is_special(event):
@@ -124,8 +129,8 @@ daytime_special = on_message(rule=_special_daytime_checker(), priority=6, block=
 
 @daytime_special.handle()
 async def _handle_special_daytime(bot: Bot, event: MessageEvent):
-    log_command("河图问候", event)
-    name = event.sender.card or event.sender.nickname or "河图"
+    log_command("心动问安", event)
+    name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     text = event.get_message().extract_plain_text().strip()
     if text in {"晚安", "睡了", "我睡了"}:
         reply = random.choice([
@@ -142,8 +147,15 @@ async def _handle_special_daytime(bot: Bot, event: MessageEvent):
     await daytime_special.finish(reply, at_sender=True)
 
 
-# ==================== /河图 心事卡 ====================
-special_cmd = on_command("河图", aliases={"心事", "小心思"}, priority=5, block=True)
+# ==================== /心事 心事卡 ====================
+# 主命令固定为「心事」；同时把 CRUSH_NAMES 里的每个称呼也注册成别名，
+# 于是 /心事 和 /<喜欢的人的名字> 都能查看。
+special_cmd = on_command(
+    "心事",
+    aliases=set(SPECIAL_NAMES) | {"小心思"},
+    priority=5,
+    block=True,
+)
 
 
 @special_cmd.handle()
@@ -152,7 +164,7 @@ async def _handle_special_cmd(bot: Bot, event: MessageEvent):
     if role < ROLE_OWNER:
         await special_cmd.finish("这是洛书的一点小心事…还是不给你看啦~")
 
-    log_command("河图心事", event)
+    log_command("心事卡", event)
     names = " / ".join(SPECIAL_NAMES)
     qqs = ", ".join(_OWNER_QQ) if _OWNER_QQ else "（未配置）"
     await special_cmd.finish(

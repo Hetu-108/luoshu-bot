@@ -41,6 +41,14 @@ _HELP_WORDS = {
     "你会什么", "能做什么", "有哪些功能",
 }
 
+# 「洛书偷偷喜欢的人」的称呼（与 fun.py / ai_chat.py 一致，来自 .env 的 CRUSH_NAMES）
+_CRUSH = _split_names(getattr(_cfg, "crush_names", "")) or ["小美"]
+_CRUSH0 = _CRUSH[0]  # 菜单里展示用的默认称呼
+
+# 分类名（集中定义，方便统一改）
+CAT_OWNER = "管理员专属"
+CAT_CRUSH = "心动专属"
+
 # ==================== 功能注册表 ====================
 # 每项： { "name": 显示名, "aliases": [别名], "category": 分类,
 #         "usage": 用法, "example": 示例, "desc": 说明 }
@@ -97,38 +105,38 @@ FEATURES = [
         "desc": "抽取塔罗牌并给出牌意解读，含正逆位。娱乐向，仅供参考。",
     },
 
-    # ---- 河图专属（洛书喜欢的人）----
+    # ---- 心动专属（洛书偷偷喜欢的人）----
     {
-        "name": "河图问候",
-        "aliases": ["麻花", "河图", "打招呼"],
-        "category": "河图专属",
-        "usage": "直接说「麻花」「河图」「河图在吗」",
-        "example": "河图",
-        "desc": "河图出现时洛书略显慌张的应答。仅河图可见。",
+        "name": "心动打招呼",
+        "aliases": ["打招呼"] + _CRUSH,
+        "category": CAT_CRUSH,
+        "usage": f"直接说「{_CRUSH0}」「{_CRUSH0}在吗」",
+        "example": f"{_CRUSH0}",
+        "desc": "她喜欢的人出现时，洛书略显慌张的应答。仅该人可见。",
     },
     {
-        "name": "河图夸奖",
+        "name": "心动夸奖",
         "aliases": ["夸夸", "真棒"],
-        "category": "河图专属",
+        "category": CAT_CRUSH,
         "usage": "消息里包含 真棒 / 好棒 / 夸夸 / 可爱 等词",
-        "example": "河图真棒",
-        "desc": "被喜欢的人夸奖时，洛书会特别不好意思。仅河图可见。",
+        "example": f"{_CRUSH0}真棒",
+        "desc": "被喜欢的人夸奖时，洛书会特别不好意思。仅该人可见。",
     },
     {
-        "name": "河图问安",
+        "name": "心动问安",
         "aliases": ["早安", "晚安"],
-        "category": "河图专属",
+        "category": CAT_CRUSH,
         "usage": "直接说 早安 / 晚安 / 午安",
         "example": "晚安",
-        "desc": "河图道早安/晚安时的专属问候。仅河图可见。",
+        "desc": "喜欢的人道早安/晚安时的专属问候。仅该人可见。",
     },
     {
         "name": "洛书心事",
-        "aliases": ["河图", "心事", "小心思"],
-        "category": "河图专属",
-        "usage": "/河图",
-        "example": "/河图",
-        "desc": "查看洛书关于河图的一点小心事。仅河图可见。",
+        "aliases": ["心事", "小心思"] + _CRUSH,
+        "category": CAT_CRUSH,
+        "usage": "/心事",
+        "example": "/心事",
+        "desc": "查看洛书的一点小心事。仅该人可见。",
     },
 
     # ---- 管理 ----
@@ -193,7 +201,7 @@ FEATURES = [
 ]
 
 # 分类顺序
-CATEGORY_ORDER = ["AI 对话", "娱乐", "河图专属", "管理", "管理员专属"]
+CATEGORY_ORDER = ["AI 对话", "娱乐", CAT_CRUSH, "管理", CAT_OWNER]
 
 
 def _find_feature(flag: str):
@@ -208,7 +216,7 @@ def _find_feature(flag: str):
 def _overview(is_owner: bool) -> str:
     lines = ["📖 洛书 功能总览", "", "查单个功能用法：/help 功能名", ""]
     for cat in CATEGORY_ORDER:
-        if cat in ("管理员专属", "河图专属") and not is_owner:
+        if cat in (CAT_OWNER, CAT_CRUSH) and not is_owner:
             continue
         items = [f for f in FEATURES if f["category"] == cat]
         if not items:
@@ -246,8 +254,8 @@ async def _handle_help(bot: Bot, event: MessageEvent, arg: Message = CommandArg(
     if flag:
         f = _find_feature(flag)
         if f:
-            if f["category"] in ("管理员专属", "河图专属") and not is_owner:
-                await help_cmd.finish("这个功能仅河图可用哦。")
+            if f["category"] in (CAT_OWNER, CAT_CRUSH) and not is_owner:
+                await help_cmd.finish("这个功能仅「心动专属」可见哦。")
             await help_cmd.finish(_detail(f))
         await help_cmd.finish(f"没找到「{flag}」这个功能。\n发 /help 查看功能总览。")
 

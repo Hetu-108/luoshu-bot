@@ -28,6 +28,17 @@ GROUP_ID = 123456
 _superusers = sorted(getattr(driver.config, "superusers", []) or [])
 USER_ID = int(_superusers[0]) if _superusers else 10000000
 
+# 「心动的人」的称呼，从 .env 的 CRUSH_NAMES 读取（逗号分隔，默认 小美）
+_crush_raw = getattr(driver.config, "crush_names", None) or "小美"
+if isinstance(_crush_raw, (list, tuple, set)):
+    _CRUSH = [str(x).strip() for x in _crush_raw if str(x).strip()]
+else:
+    _CRUSH = [x.strip() for x in str(_crush_raw).split(",") if x.strip()]
+if not _CRUSH:
+    _CRUSH = ["小美"]
+CRUSH1 = _CRUSH[0]
+CRUSH2 = _CRUSH[1] if len(_CRUSH) > 1 else ""
+
 
 class FakeBot(Bot):
     """把发送的消息打印出来，而不是真的发到 QQ"""
@@ -123,15 +134,17 @@ async def main():
     await send("/塔罗", note="F-11 单张")
     await send("/塔罗 三张", note="F-11 三张")
 
-    print("\n========== 河图专属互动（洛书喜欢的人）==========")
-    await send("麻花", note="河图打招呼（昵称1，应略显慌张）")
-    await send("河图", note="河图打招呼（昵称2）")
-    await send("晚安", note="河图道晚安")
-    await send("麻花真棒", note="河图被夸，洛书应特别不好意思")
-    await send("/河图", note="洛书心事卡")
-    await send("/河图", user_id=99999999, note="非河图应被拒")
-    await send("麻花", user_id=99999999, note="非河图打招呼应无响应")
-    await send("/河图", user_id=88888888, note="非管理员 QQ 同样应被拒")
+    print("\n========== 心动专属互动（洛书喜欢的人）==========")
+    print(f"  （称呼取自 .env 的 CRUSH_NAMES：{CRUSH1}{'、' + CRUSH2 if CRUSH2 else ''}）")
+    await send(CRUSH1, note="打招呼（昵称1，应略显慌张）")
+    if CRUSH2:
+        await send(CRUSH2, note="打招呼（昵称2）")
+    await send("晚安", note="道晚安")
+    await send(f"{CRUSH1}真棒", note="被夸，洛书应特别不好意思")
+    await send("/心事", note="洛书心事卡")
+    await send("/心事", user_id=99999999, note="非心动对象应被拒")
+    await send(CRUSH1, user_id=99999999, note="非心动对象打招呼应无响应")
+    await send("/心事", user_id=88888888, note="非管理员 QQ 同样应被拒")
 
     print("\n========== 喊名字对话（所有人可用）==========")
     await send("洛书 你好呀", user_id=55555555, note="普通成员喊名字应能聊天")
@@ -148,7 +161,7 @@ async def main():
     await asyncio.sleep(3.5)  # 等过冷却
     await send("/history")
     await send("/人设")
-    await send("河图 今天过得怎么样", at_bot=True, note="河图对话（应显露心动，且不叫主人）")
+    await send(f"{CRUSH1} 今天过得怎么样", at_bot=True, note="心动对象对话（应显露心动，且不叫主人）")
     await asyncio.sleep(3.5)
 
     print("\n=== 自检完成，以上若无 [异常] 即为通过 ===")
