@@ -32,10 +32,11 @@ from .core import (
     ROLE_NAMES,
     log_command,
 )
+from .features import guard
 
 
 # ==================== 身份查询 ====================
-whoami = on_command("whoami", aliases={"身份"}, priority=5, block=True)
+whoami = on_command("whoami", aliases={"身份"}, rule=guard("whiteboard"), priority=5, block=True)
 
 
 # 也支持不带前缀（群友习惯直接打 whoami）
@@ -46,7 +47,7 @@ def _whoami_checker() -> Rule:
     return Rule(_checker)
 
 
-whoami_bare = on_message(rule=_whoami_checker(), priority=6, block=True)
+whoami_bare = on_message(rule=_whoami_checker() & guard("whiteboard"), priority=6, block=True)
 
 
 @whoami_bare.handle()
@@ -71,7 +72,7 @@ async def _render_whoami(bot: Bot, event: MessageEvent):
 
 
 # ==================== 禁言自己 ====================
-ban = on_command("禁言", priority=5, block=True)
+ban = on_command("禁言", rule=guard("ban"), priority=5, block=True)
 
 
 @ban.handle()

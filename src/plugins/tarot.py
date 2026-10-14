@@ -19,6 +19,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message
 from nonebot.params import CommandArg
 
 from .core import log_command, check_cooldown
+from .features import guard
 from .tarot_deck import FULL_DECK
 
 POSITIONS = ["过去", "现在", "未来"]
@@ -63,7 +64,7 @@ def _resolve_target(event: MessageEvent) -> tuple:
     return str(event.get_user_id()), (event.sender.card or event.sender.nickname or "你")
 
 
-tarot = on_command("塔罗", aliases={"tarot", "抽塔罗"}, priority=5, block=True)
+tarot = on_command("塔罗", aliases={"tarot", "抽塔罗"}, rule=guard("tarot"), priority=5, block=True)
 
 
 @tarot.handle()

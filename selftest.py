@@ -22,6 +22,8 @@ nonebot.load_from_toml("pyproject.toml")
 
 SELF_ID = "10000"
 GROUP_ID = 123456
+# 第二个群号：用来验证「功能开关按群隔离」——A 群关掉的功能，B 群不受影响
+GROUP_ID_2 = 654321
 
 # 管理员 QQ 从配置读取（.env 的 SUPERUSERS），不把真实 QQ 写死在源码里。
 # 新用户复制 .env.example 后无需改这里，测试会自动对上自己的配置。
@@ -66,7 +68,8 @@ class FakeBot(Bot):
 
 
 def make_group_event(text: str, user_id: int = USER_ID, at_bot: bool = False,
-                     reply: bool = False, role: str = "member") -> GroupMessageEvent:
+                     reply: bool = False, role: str = "member",
+                     group_id: int = GROUP_ID) -> GroupMessageEvent:
     if at_bot:
         msg = Message(f"[CQ:at,qq={SELF_ID}] {text}")
     else:
@@ -78,7 +81,7 @@ def make_group_event(text: str, user_id: int = USER_ID, at_bot: bool = False,
         "message_type": "group",
         "sub_type": "normal",
         "message_id": 123,
-        "group_id": GROUP_ID,
+        "group_id": group_id,
         "user_id": user_id,
         "raw_message": str(msg),
         "font": 0,
@@ -99,13 +102,16 @@ def make_group_event(text: str, user_id: int = USER_ID, at_bot: bool = False,
 
 
 async def send(text: str, at_bot: bool = False, reply: bool = False,
-               note: str = "", as_admin: bool = False, user_id: int = USER_ID):
+               note: str = "", as_admin: bool = False, user_id: int = USER_ID,
+               group_id: int = GROUP_ID):
     role = "admin" if as_admin else "member"
     bot = FakeBot(as_admin=as_admin)
-    event = make_group_event(text, user_id=user_id, at_bot=at_bot, reply=reply, role=role)
+    event = make_group_event(text, user_id=user_id, at_bot=at_bot, reply=reply,
+                             role=role, group_id=group_id)
     prefix = "@我 " if at_bot else ""
     tag = f"（{note}）" if note else ""
-    print(f"\n>>> {prefix}{text}{tag}")
+    gtag = f"[群{group_id}] " if group_id != GROUP_ID else ""
+    print(f"\n>>> {gtag}{prefix}{text}{tag}")
     from nonebot.message import handle_event
     try:
         await handle_event(bot, event)
@@ -155,6 +161,19 @@ async def main():
     print("\n========== 管理辅助层 ==========")
     await send("/统计", note="F-12 普通成员应被拒")
     await send("/统计", note="F-12 管理员可查", as_admin=True)
+
+    print("\n========== 群功能开关（按群隔离）==========")
+    await send("/功能", note="查看本群开关（默认全开）")
+    await send("/功能 关闭 运势", user_id=99999999, note="普通成员应被拒")
+    await send("/功能 关闭 运势 塔罗", as_admin=True, note="关掉本群运势与塔罗")
+    await send("/运势", note="本群运势应已关闭（无回复）")
+    await send("/塔罗", note="本群塔罗应已关闭（无回复）")
+    await send("/运势", group_id=GROUP_ID_2, note="另一群运势应不受影响（有回复）")
+    await send("/功能", group_id=GROUP_ID_2, note="另一群开关应仍为全开")
+    await send("/功能 开启 运势", as_admin=True, note="重新开启本群运势")
+    await send("/运势", note="本群运势应恢复")
+    await send("/功能 重置", as_admin=True, note="恢复本群默认")
+    await send("今日人品", note="重置后裸触发也应恢复")
 
     print("\n========== AI 对话 ==========")
     await send("你好呀，简单介绍一下你自己，一句话", at_bot=True, note="F-13 普通成员 @我")

@@ -18,6 +18,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
 from .core import JsonStore, get_role, ROLE_GROUP_ADMIN, log_command
+from .features import guard
 
 _store = JsonStore("keywords.json")
 
@@ -35,7 +36,7 @@ def _save_map(event: MessageEvent, data: dict) -> None:
 
 
 # ==================== 管理命令 ====================
-kw = on_command("关键词", aliases={"自动回复"}, priority=5, block=True)
+kw = on_command("关键词", aliases={"自动回复"}, rule=guard("keywords"), priority=5, block=True)
 
 
 @kw.handle()
@@ -116,7 +117,7 @@ def _keyword_rule() -> Rule:
     return Rule(_checker)
 
 
-kw_reply = on_message(rule=_keyword_rule(), priority=60, block=True)
+kw_reply = on_message(rule=_keyword_rule() & guard("keyword_reply"), priority=60, block=True)
 
 
 @kw_reply.handle()

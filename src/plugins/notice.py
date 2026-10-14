@@ -23,6 +23,8 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.log import logger
 
+from .features import guard
+
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
 driver = get_driver()
@@ -40,7 +42,7 @@ def poke_checker():
     return Rule(_checker)
 
 
-poke = on_notice(rule=poke_checker(), priority=0, block=True)
+poke = on_notice(rule=poke_checker() & guard("poke"), priority=0, block=True)
 
 
 @poke.handle()
@@ -62,7 +64,7 @@ async def _handle_poke(event: PokeNotifyEvent):
 
 
 # ==================== 入群欢迎 ====================
-inc = on_notice(priority=5, block=True)
+inc = on_notice(rule=guard("welcome"), priority=5, block=True)
 
 
 @inc.handle()
@@ -86,7 +88,7 @@ async def _handle_increase(bot: Bot, event: GroupIncreaseNoticeEvent):
 
 
 # ==================== 退群提示 ====================
-dec = on_notice(priority=5, block=True)
+dec = on_notice(rule=guard("farewell"), priority=5, block=True)
 
 
 @dec.handle()

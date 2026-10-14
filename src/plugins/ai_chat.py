@@ -31,6 +31,7 @@ from nonebot.log import logger
 from .personas import PERSONAS, DEFAULT_PERSONA
 from .core import check_cooldown, log_command, log_event, notify_owner, _OWNER_QQ
 from .security import has_sensitive, filter_text
+from .features import guard
 
 # ==================== 配置读取 ====================
 driver = get_driver()
@@ -145,7 +146,9 @@ _CRUSH_NAME = _CRUSH_NAMES[0] if _CRUSH_NAMES else "TA"
 
 # 帮助类命令词：喊名字 + 这些词时，交给 help_menu.py 处理，AI 不要抢答
 # （覆盖 "洛书 /h"、"洛书 /help"、"洛书 h"、"洛书 菜单" 等写法）
-HELP_WORDS = {"h", "help", "菜单", "帮助", "功能", "功能清单", "功能列表", "你会什么", "能做什么"}
+# 注意：「功能」不再列入 —— 它现在是一个真实命令（/功能 群功能开关），
+#       若列入会被当成帮助词劫持，导致 /功能 关不掉功能。
+HELP_WORDS = {"h", "help", "菜单", "帮助", "功能清单", "功能列表", "你会什么", "能做什么"}
 
 
 def _is_help_cmd(text: str) -> bool:
@@ -195,7 +198,7 @@ def _called_me() -> Rule:
     return Rule(_checker)
 
 
-chat = on_message(rule=_called_me(), priority=97, block=True)
+chat = on_message(rule=_called_me() & guard("ai"), priority=97, block=True)
 
 
 async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
@@ -287,7 +290,7 @@ async def _handle_chat(bot: Bot, event: MessageEvent):
 
 
 # ==================== /ai 命令式触发 ====================
-ai_cmd = on_command("ai", aliases={"提问"}, priority=5, block=True)
+ai_cmd = on_command("ai", aliases={"提问"}, rule=guard("ai"), priority=5, block=True)
 
 
 @ai_cmd.handle()
@@ -318,7 +321,7 @@ def _split_message(text: str, limit: int = 800) -> list:
 
 
 # ==================== 人设切换 ====================
-switch = on_command("切换", aliases={"人设切换"}, priority=5, block=True)
+switch = on_command("切换", aliases={"人设切换"}, rule=guard("switch"), priority=5, block=True)
 
 
 @switch.handle()
@@ -349,7 +352,7 @@ async def _handle_switch(bot: Bot, event: MessageEvent, arg: Message = CommandAr
     await switch.finish(f"好嘞，已切换为「{name}」，之前聊的就不记得啦～")
 
 
-persona_cmd = on_command("人设", aliases={"persona"}, priority=5, block=True)
+persona_cmd = on_command("人设", aliases={"persona"}, rule=guard("persona"), priority=5, block=True)
 
 
 @persona_cmd.handle()
@@ -367,7 +370,7 @@ async def _handle_persona(bot: Bot, event: MessageEvent):
 
 
 # ==================== 重置 / 查看历史 ====================
-reset = on_command("reset", aliases={"重置", "清空"}, priority=5, block=True)
+reset = on_command("reset", aliases={"重置", "清空"}, rule=guard("reset"), priority=5, block=True)
 
 
 @reset.handle()
@@ -380,7 +383,7 @@ async def _handle_reset(bot: Bot, event: MessageEvent):
     await reset.finish("对话记忆已清空，我们重新开始吧～")
 
 
-history = on_command("history", aliases={"历史"}, priority=5, block=True)
+history = on_command("history", aliases={"历史"}, rule=guard("history"), priority=5, block=True)
 
 
 @history.handle()

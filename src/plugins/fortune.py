@@ -21,6 +21,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
 from .core import log_command, check_cooldown
+from .features import guard
 
 # ==================== 签文库 ====================
 # 等级由高到低，趣味向描述
@@ -97,7 +98,7 @@ def _target_prefix(target_id: str, target_name: str, self_id: str, self_name: st
 
 
 # ==================== /抽签 ====================
-draw = on_command("抽签", aliases={"求签"}, priority=5, block=True)
+draw = on_command("抽签", aliases={"求签"}, rule=guard("draw"), priority=5, block=True)
 
 
 @draw.handle()
@@ -149,7 +150,7 @@ def _stars(v: int) -> str:
     return "★" * n + "☆" * (5 - n)
 
 
-luck = on_command("运势", aliases={"今日运势", "今日人品", "人品"}, priority=5, block=True)
+luck = on_command("运势", aliases={"今日运势", "今日人品", "人品"}, rule=guard("luck"), priority=5, block=True)
 
 
 # 也支持不带前缀直接说（群里更自然）
@@ -161,7 +162,7 @@ def _luck_checker() -> Rule:
     return Rule(_checker)
 
 
-luck_bare = on_message(rule=_luck_checker(), priority=6, block=True)
+luck_bare = on_message(rule=_luck_checker() & guard("luck"), priority=6, block=True)
 
 
 @luck_bare.handle()

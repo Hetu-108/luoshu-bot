@@ -23,6 +23,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent, Bot
 from nonebot.rule import Rule
 
 from .core import log_command, get_role, ROLE_OWNER, _OWNER_QQ
+from .features import guard
 
 # ==================== 「心动的人」的称呼 ====================
 # SPECIAL_NAMES 从 .env 的 CRUSH_NAMES 读取（逗号分隔）
@@ -67,7 +68,7 @@ def _special_greet_checker() -> Rule:
     return Rule(_checker)
 
 
-greet_special = on_message(rule=_special_greet_checker(), priority=6, block=True)
+greet_special = on_message(rule=_special_greet_checker() & guard("crush"), priority=6, block=True)
 
 
 @greet_special.handle()
@@ -96,7 +97,7 @@ def _special_praise_checker() -> Rule:
     return Rule(_checker)
 
 
-praise_special = on_message(rule=_special_praise_checker(), priority=7, block=True)
+praise_special = on_message(rule=_special_praise_checker() & guard("crush"), priority=7, block=True)
 
 
 @praise_special.handle()
@@ -124,7 +125,7 @@ def _special_daytime_checker() -> Rule:
     return Rule(_checker)
 
 
-daytime_special = on_message(rule=_special_daytime_checker(), priority=6, block=True)
+daytime_special = on_message(rule=_special_daytime_checker() & guard("crush"), priority=6, block=True)
 
 
 @daytime_special.handle()
@@ -153,6 +154,7 @@ async def _handle_special_daytime(bot: Bot, event: MessageEvent):
 special_cmd = on_command(
     "心事",
     aliases=set(SPECIAL_NAMES) | {"小心思"},
+    rule=guard("crush"),
     priority=5,
     block=True,
 )

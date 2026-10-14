@@ -20,6 +20,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
 from .core import JsonStore, get_role, ROLE_GROUP_ADMIN, log_command
+from .features import guard
 
 _store = JsonStore("stats.json")
 
@@ -92,7 +93,7 @@ def _date_range(scope: str) -> list:
 
 
 # ==================== /统计 ====================
-stats = on_command("统计", aliases={"stats", "数据"}, priority=5, block=True)
+stats = on_command("统计", aliases={"stats", "数据"}, rule=guard("stats"), priority=5, block=True)
 
 
 @stats.handle()
