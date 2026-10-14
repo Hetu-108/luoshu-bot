@@ -30,14 +30,52 @@
 
 ### 前置条件
 
-| 项目 | 要求 |
-| --- | --- |
-| Python | **3.10 或更高** |
-| [Ollama](https://ollama.com) | 最新版（提供本地大模型服务） |
-| 登录端 | 任意 [OneBot v11](https://onebot.dev) 实现，通过 ws-reverse 连入 |
+需要准备三样东西：**Python**、**Ollama**（本地大模型服务）、**登录端**（让机器人登入 QQ）。
 
-> 登录端（负责让机器人登入 QQ）不包含在本仓库内，请自行准备，并让它连接到
-> `ws://127.0.0.1:8080/onebot/v11/ws`。
+| 项目 | 要求 | 获取方式 |
+| --- | --- | --- |
+| Python | **3.10 或更高** | [python.org](https://www.python.org/downloads/)；安装时记得勾选 **Add to PATH** |
+| Ollama | 最新版 | 见下方「① 安装 Ollama」 |
+| 登录端 | 任意 [OneBot v11](https://onebot.dev) 实现 | 见下方「② 准备登录端」 |
+
+#### ① 安装 Ollama
+
+从官网下载并安装：[https://ollama.com/download](https://ollama.com/download)
+
+- **Windows**：下载 `OllamaSetup.exe`，双击安装（装完自动常驻，开机自启）
+- **macOS**：下载 `.dmg`，或 `brew install ollama`
+- **Linux**：
+
+  ```bash
+  curl -fsSL https://ollama.com/install.sh | sh
+  ```
+
+装好后验证（能打印版本号即可）：
+
+```bash
+ollama --version
+```
+
+#### ② 准备登录端
+
+登录端（OneBot 实现）负责让机器人登入 QQ，**不包含在本仓库内**，需要单独准备。常见选择：
+
+| 登录端 | 说明 |
+| --- | --- |
+| **LLOneBot / LLNT** | QQ 插件形式（如 LiteLoaderQQNT），配置简单，许多人的首选 |
+| **NapCat** | 同样基于 QQNT，社区活跃，文档完善 |
+| **Lagrange.Core** | 独立程序，无需装 QQ 客户端 |
+| **go-cqhttp** | 老牌方案（现已基本停更，仅作了解） |
+
+任选其一，按它自己的文档装好并登录账号，然后把它配置成 **ws-reverse（反向 WebSocket）**，地址填：
+
+```
+ws://127.0.0.1:8080/onebot/v11/ws
+```
+
+> 端口取 `.env` 里的 `PORT`（默认 `8080`）。
+> 如果登录端和 bot **不在同一台机器**，把地址里的 `127.0.0.1` 换成 bot 所在机器的 IP，
+> 并把 `.env` 的 `HOST` 改成 `0.0.0.0`（详见下方 Linux 一节）。
 
 ### 1. 获取代码
 
@@ -50,6 +88,8 @@ cd luoshu-bot
 > 想装某个已发布版本，见 [Releases](https://github.com/Hetu-108/luoshu-bot/releases)。
 
 ### 2. 拉取模型
+
+确保 Ollama 已安装（见上方「① 安装 Ollama」），然后下载模型：
 
 ```bash
 ollama pull qwen2.5:7b
