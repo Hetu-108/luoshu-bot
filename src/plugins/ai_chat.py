@@ -16,6 +16,7 @@
 # 输入输出均做敏感词过滤（见 security.py）
 import json
 import os
+import re
 import asyncio
 from pathlib import Path
 
@@ -52,6 +53,20 @@ _lock = asyncio.Lock()
 
 # 会话过期：超过该天数未活动的会话，在保存时顺手清理（避免文件与内存无限膨胀）
 SESSION_TTL_DAYS = int(getattr(cfg, "ai_session_ttl_days", 30))
+
+# 思考型模型（如 qwen3-vl）可能把推理过程包在 <think>...</think> 里，
+# 或者写在独立的 message.thinking 字段。这里统一兜底：回复里若混入思考块就剥掉。
+_THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE)
+_THINK_OPEN_RE = re.compile(r"<think(?:ing)?>.*", re.DOTALL | re.IGNORECASE)
+
+
+def _clean_reply(text: str) -> str:
+    """剥离思考模型可能混进正文的推理块，只留真正要发出去的内容。"""
+    if not text:
+        return ""
+    text = _THINK_RE.sub("", text)
+    text = _THINK_OPEN_RE.sub("", text)  # 未闭合的 <think...> 也一并截掉
+    return text.strip()
 
 
 def _load_sessions() -> dict:
@@ -153,7 +168,8 @@ async def ask_ollama(
             resp.raise_for_status()
             data = resp.json()
             _ollama_ok = True  # 成功即恢复健康标志
-            return (data.get("message") or {}).get("content", "").strip()
+            msg = data.get("message") or {}
+            return _clean_reply(msg.get("content", ""))
     except httpx.ConnectError:
         _ollama_ok = False
         raise RuntimeError(f"连接不上本地模型服务 {OLLAMA_URL}，请确认 Ollama 已启动")

@@ -92,19 +92,21 @@ cd luoshu-bot
 确保 Ollama 已安装（见上方「① 安装 Ollama」），然后下载模型：
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen3-vl:4b
 ```
 
-**模型怎么选**（按显存从低到高，拉完在 `.env` 里改 `OLLAMA_MODEL` 即可切换）：
+**模型怎么选**（拉完在 `.env` 里改 `OLLAMA_MODEL` 即可切换）：
 
-| 模型 | 显存 | 说明 |
+| 模型 | 大小 | 说明 |
 | --- | --- | --- |
+| `qwen3-vl:4b` | 约 3.3 GB | **推荐**，新一代，支持图文，速度与效果均衡 |
+| `qwen3-vl:8b` | 约 6 GB | 效果更好，需要更多显存 |
+| `qwen2.5:7b` | 约 4.7 GB | 旧版纯文本模型，效果一般，可作备选 |
 | `qwen2.5:3b` | 约 2 GB | 快，效果一般，老机器 / 纯 CPU 可用 |
-| `qwen2.5:7b` | 约 5 GB | **推荐**，日常够用 |
-| `qwen2.5:14b` | 约 10 GB | 效果更好 |
-| `qwen2.5:32b` | 约 20 GB | 最好，需要好显卡 |
 
 > 查已装模型：`ollama list`。
+> 注：`qwen3-vl` 是「思考型」模型，默认会先推理再作答。机器人会自动剥离推理过程，
+> 只把最终回复发出去，无需额外配置。
 
 ### 3. Windows
 
@@ -226,7 +228,7 @@ CRUSH_NAMES=他的名字
 NICKNAME=["洛书", "洛"]          # 机器人昵称
 CALL_NAMES=洛书,洛洛,小洛,洛      # 喊名字唤醒用的称呼
 OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=qwen2.5:7b          # 使用的模型
+OLLAMA_MODEL=qwen3-vl:4b          # 使用的模型
 AI_MAX_HISTORY=20                # 记住多少轮对话
 AI_AT_SENDER=false               # AI 回复是否 @ 对方
 GREETING_ENABLED=true            # 是否开启定时问好
@@ -310,7 +312,7 @@ GREETING_ENABLED=true            # 是否开启定时问好
 
 ## 更新日志
 
-各版本的变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。当前版本：**v1.3.0**。
+各版本的变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。当前版本：**v1.3.1**。
 
 ---
 

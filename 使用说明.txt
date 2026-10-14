@@ -143,7 +143,7 @@
                     通常和上面的 SUPERUSERS 填同一个人
   NICKNAME          机器人昵称（默认「洛书」）
   CALL_NAMES        喊名字唤醒用的称呼（逗号分隔，默认「洛书,洛洛,小洛,洛」）
-  OLLAMA_MODEL      默认模型，如 qwen2.5:7b
+  OLLAMA_MODEL      默认模型，如 qwen3-vl:4b
   AI_MAX_HISTORY    记住多少轮对话（默认 20）
   AI_AT_SENDER      AI 回复是否 @ 对方
   AI_SESSION_TTL_DAYS  多久不聊天就自动清理对话记忆（默认 30 天，0=不清理）
@@ -209,13 +209,16 @@
 ----------------------------------------
 
 查看已装模型：命令行输入   ollama list
-下载新模型：  ollama pull qwen2.5:14b
+下载新模型：  ollama pull qwen3-vl:8b
 
 推荐（按配置从低到高）：
-  qwen2.5:3b    约 2GB 显存，快，效果一般
-  qwen2.5:7b    约 5GB 显存，推荐，日常够用
-  qwen2.5:14b   约 10GB 显存，效果更好
-  qwen2.5:32b   约 20GB 显存，需要好显卡
+  qwen3-vl:4b   约 3.3GB，推荐，新一代，支持图文，速度与效果均衡
+  qwen3-vl:8b   约 6GB，效果更好，需要更多显存
+  qwen2.5:7b    约 4.7GB，旧版纯文本模型，效果一般，可作备选
+  qwen2.5:3b    约 2GB，快，效果一般，老机器 / 纯 CPU 可用
+
+说明：qwen3-vl 是「思考型」模型，默认先推理再作答。机器人会自动剥离推理过程，
+      只把最终回复发出去，无需额外配置。
 
 
 八、常见问题
