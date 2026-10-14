@@ -1,15 +1,16 @@
 # python3
 # -*- coding: utf-8 -*-
 # @File    : fun.py
-# @Usage   : 洛书对「心动的人」的专属互动
+# @Usage   : 洛书对「熟人」的专属互动
 #
 # 说明：机器人名为「洛书」，形象是一个可爱、略显内向的小女孩。
 #       洛书和群里每个人都是平等的朋友，没有谁是她「主人」。
-#       而「心动的人」（.env 的 CRUSH_NAMES，同时也是 SUPERUSERS 里的管理员）
-#       是她偷偷喜欢的人——见本文件与 ai_chat.py。
+#       而「熟人」（.env 的 CRUSH_NAMES，同时也是 SUPERUSERS 里的管理员）
+#       是她相处得更自在的朋友 —— 语气只比别人稍微亲近一点点，
+#       不是暧昧、不是暗恋，见本文件与 ai_chat.py。
 #
-#   <名字> / <名字>在吗       → 她略显慌张的应答
-#   <名字> + 夸奖词           → 被喜欢的人夸，会特别不好意思
+#   <名字> / <名字>在吗       → 比平时放松一点的应答
+#   <名字> + 夸奖词           → 被熟人夸，会有点不好意思
 #   <名字> 说「晚安 / 早安」  → 专属问候
 #   /心事                     → 查看她的一点小心思
 #
@@ -24,7 +25,7 @@ from nonebot.rule import Rule
 from .core import log_command, get_role, ROLE_OWNER, _OWNER_QQ
 from .features import guard
 
-# ==================== 「心动的人」的称呼 ====================
+# ==================== 「熟人」的称呼 ====================
 # SPECIAL_NAMES 从 .env 的 CRUSH_NAMES 读取（逗号分隔）
 _DEFAULT_NAME = "小美"  # 未配置时的占位符，改 .env 即可换成你自己
 _cfg = get_driver().config
@@ -44,7 +45,7 @@ _DEFAULT_CALL = SPECIAL_NAMES[0]
 
 
 def _is_special(event: MessageEvent) -> bool:
-    """是否为「洛书喜欢的人」（技术上是管理员）"""
+    """是否为「洛书熟人」（技术上是管理员）"""
     return str(event.get_user_id()) in _OWNER_QQ
 
 
@@ -75,11 +76,11 @@ async def _handle_special_greet(bot: Bot, event: MessageEvent):
     log_command("心动打招呼", event)
     name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
-        f"诶…{name}？我在的，怎、怎么啦 (๑´ω`๑)",
-        f"啊，是{name}呀…嗯，我在~",
-        f"嗯…{name}找我有事吗？",
-        f"那个……{name}叫我啦，我在我在~",
-        f"唔…{name}？我在的，你说吧~",
+        f"{name}？我在的，怎么啦~",
+        f"嗯，是{name}呀，我在~",
+        f"{name}找我有事吗？",
+        f"在的在的，{name}你说~",
+        f"唔，{name}？我在呢~",
     ]
     await greet_special.finish(random.choice(replies), at_sender=True)
 
@@ -104,11 +105,11 @@ async def _handle_special_praise(bot: Bot, event: MessageEvent):
     log_command("心动夸奖", event)
     name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
-        f"诶？！{name}夸我…那个，没什么啦 (⁄ ⁄•⁄ω⁄•⁄ ⁄)",
-        f"唔…{name}说这种话，我、我会当真的…",
-        f"才没有很厉害呢…不过，谢谢{name}啦~",
-        f"被{name}这么说…嘿嘿，那我偷偷开心一下~",
-        f"嗯…{name}别乱夸啦，我会不知道怎么回应的…",
+        f"谢谢{name}~ 不过真的没那么厉害啦",
+        f"诶，被{name}夸了…谢谢你呀~",
+        f"唔…{name}这么说，我会不好意思的~",
+        f"嘿嘿，那就谢谢{name}啦~",
+        f"嗯…{name}别乱夸，我会不知道怎么回的~",
     ]
     await praise_special.finish(random.choice(replies), at_sender=True)
 
@@ -134,22 +135,22 @@ async def _handle_special_daytime(bot: Bot, event: MessageEvent):
     text = event.get_message().extract_plain_text().strip()
     if text in {"晚安", "睡了", "我睡了"}:
         reply = random.choice([
-            f"{name}晚安…那，明天见啦 🌙",
+            f"{name}晚安，明天见~ 🌙",
             f"嗯，{name}早点睡，做个好梦~ 💤",
-            f"好…晚安，{name}。（我也去休息了…）",
+            f"好，晚安{name}~",
         ])
     else:
         reply = random.choice([
-            f"{name}早呀…今天也要好好的哦 ☀️",
+            f"{name}早呀，今天也要好好的哦 ☀️",
             f"早上好{name}，记得吃早饭~",
-            f"{name}午安…记得按时吃饭🍚",
+            f"{name}午安，记得按时吃饭~ 🍚",
         ])
     await daytime_special.finish(reply, at_sender=True)
 
 
 # ==================== /心事 心事卡 ====================
 # 主命令固定为「心事」；同时把 CRUSH_NAMES 里的每个称呼也注册成别名，
-# 于是 /心事 和 /<喜欢的人的名字> 都能查看。
+# 于是 /心事 和 /<熟人的名字> 都能查看。
 special_cmd = on_command(
     "心事",
     aliases=set(SPECIAL_NAMES) | {"小心思"},
@@ -172,8 +173,8 @@ async def _handle_special_cmd(bot: Bot, event: MessageEvent):
         "💭 洛书的一点小心事\n"
         f"  名字：{names}\n"
         f"  QQ：{qqs}\n"
-        "  关系：平等的好朋友（…嗯，只是朋友啦）\n"
+        "  关系：平等的好朋友（比较熟的那种）\n"
         "\n"
-        "「TA 和我说话的时候，我好像会比平时多说一点点…」\n"
+        "「TA 和我说话的时候，我好像会比平时放松一点点…」\n"
         "（@洛书 或喊「洛书」就能找我聊天~）"
     )

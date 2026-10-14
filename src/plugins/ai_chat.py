@@ -193,7 +193,7 @@ else:
 # 合并昵称与呼叫词，去重，长词优先（避免"洛"抢先匹配"洛书"）
 ALL_NAMES = sorted(set(_NICKNAMES + _CALL_NAMES), key=len, reverse=True)
 
-# 「洛书偷偷喜欢的人」的称呼（从 .env 的 CRUSH_NAMES 读取，逗号分隔）
+# 「洛书熟人」的称呼（从 .env 的 CRUSH_NAMES 读取，逗号分隔）
 _raw_crush = getattr(cfg, "crush_names", None) or ""
 if isinstance(_raw_crush, (list, tuple, set)):
     _CRUSH_NAMES = [str(x).strip() for x in _raw_crush if str(x).strip()]
@@ -216,7 +216,7 @@ def _is_help_cmd(text: str) -> bool:
 
 
 def _is_master(event: MessageEvent) -> bool:
-    """是否为「洛书喜欢的人」（技术上是管理员）"""
+    """是否为「洛书熟人」（技术上是管理员）"""
     return str(event.get_user_id()) in _OWNER_QQ
 
 
@@ -242,15 +242,34 @@ def _called_me() -> Rule:
     """
 
     async def _checker(bot: Bot, event: MessageEvent) -> bool:
-        text = event.get_message().extract_plain_text().strip()
+        _msg = event.get_message()
+        text = _msg.extract_plain_text().strip()
+
+        # 注意 1（@ 我）：
+        # nonebot 的 OneBot v11 适配器在收到消息时会先跑 _check_at_me()：
+        # 把指向自己的 at 段从 message 里【删掉】，并置 event.to_me = True。
+        # 所以到这里再去找 at 段是找不到的 —— 必须用 event.to_me。
+        # 兜底：部分实现（实测 NapCat 4.18）甚至会整段丢掉 at，
+        # 此时 to_me 也不会被置位，就再查一次 raw_message 里的 CQ 码。
+        _hit_at = bool(getattr(event, "to_me", False)) or (
+            f"[CQ:at,qq={bot.self_id}]" in (getattr(event, "raw_message", "") or "")
+        )
+
+        # 注意 2（喊名字）：
+        # 同一适配器的 _check_nickname() 会把「以 .env 的 NICKNAME 开头」的
+        # 那段文字【从 message 里删掉】（例："洛书 你好" → "你好"），并置 to_me。
+        # 所以 NICKNAME 里的名字不会出现在 text 里，靠 to_me 触发；
+        # 而 CALL_NAMES 里独有的名字（洛洛 / 小洛 / 洛）不会被删，靠下面的前缀判断。
+        _hit_name = any(text.startswith(n) for n in ALL_NAMES if n)
+
         # 「喊名字 + 帮助词」交给 help_menu.py，AI 不抢答（例：洛书 /h）
-        if _is_help_cmd(text):
+        _is_help = _is_help_cmd(text)
+
+        if _is_help:
             return False
-        for seg in event.get_message():
-            if seg.type == "at" and str(seg.data.get("qq")) == str(bot.self_id):
-                return True
-        # 以名字/呼叫词开头才算（避免正常聊天里偶然包含名字被误触发）
-        return any(text.startswith(n) for n in ALL_NAMES if n)
+        if _hit_at:
+            return True
+        return _hit_name
 
     return Rule(_checker)
 
@@ -284,17 +303,18 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
 
     system_prompt = PERSONAS.get(persona_name, PERSONAS[DEFAULT_PERSONA])
 
-    # 检测到是「心动的人」（你心里喜欢的人）时，追加心动关系设定
-    # 注意：不是上下级，不叫「主人」，你们是平等的，只是你偷偷喜欢 TA
+    # 对方是「熟人」（.env 的 CRUSH_NAMES，技术上同时是管理员）时，
+    # 只做一点轻微的语气微调：比对别人稍微放松、亲近一点即可。
+    # 注意：不要写成「心动 / 暗恋」那种暧昧人设——那会让她说话明显过了。
     if _is_master(event):
         _who = event.sender.card or event.sender.nickname or _CRUSH_NAME
         master_note = (
-            f"\n\n【重要】正在和你说话的是「{_who}」，是你偷偷喜欢的人。"
-            "你们是平等的朋友，没有任何主从关系——绝对不要叫 TA「主人」，也不要表现得卑微讨好。"
-            "你对 TA 的心动是藏不住的：会更在意 TA 说的话、回得更认真，"
-            "偶尔会不小心流露出一点小心思，然后马上不好意思地掩饰过去。"
-            "但依然保持你内向腼腆的样子，不会直接告白，也不会肉麻——"
-            "是那种「嘴上说没什么，心里却偷偷开心」的感觉。"
+            f"\n\n【语气微调】正在和你说话的是「{_who}」，是和你比较熟的朋友。"
+            "和 TA 说话可以比对别人稍微放松、亲近一点点：少一分客套，"
+            "多一分自然的关心，语气更随意一些。"
+            "但仅此而已——不要刻意撒娇卖萌，不要说肉麻的话，"
+            "不要暗示心动、暧昧或恋爱，也不要有任何表白的意味。"
+            "整体还是平时那个内向、腼腆的你，只是和 TA 聊天时更自在一点。"
         )
         system_prompt = system_prompt + master_note
 

@@ -42,7 +42,7 @@ _HELP_WORDS = {
     "你会什么", "能做什么", "有哪些功能",
 }
 
-# 「洛书偷偷喜欢的人」的称呼（与 fun.py / ai_chat.py 一致，来自 .env 的 CRUSH_NAMES）
+# 「洛书熟人」的称呼（与 fun.py / ai_chat.py 一致，来自 .env 的 CRUSH_NAMES）
 _CRUSH = _split_names(getattr(_cfg, "crush_names", "")) or ["小美"]
 _CRUSH0 = _CRUSH[0]  # 菜单里展示用的默认称呼
 
@@ -153,18 +153,18 @@ FEATURES = [
         ),
     },
 
-    # ---- 心动专属（洛书偷偷喜欢的人）----
+    # ---- 心动专属（洛书熟人）----
     {
         "name": "心动打招呼",
         "aliases": ["打招呼"] + _CRUSH,
         "category": CAT_CRUSH,
         "usage": f"直接说「{_CRUSH0}」「{_CRUSH0}在吗」",
         "example": f"{_CRUSH0}",
-        "desc": "洛书喜欢的人叫她时，她略显慌张的应答",
+        "desc": "洛书比较熟的人叫她时，比平时更放松一点的应答",
         "what": (
-            f"当「洛书偷偷喜欢的人」（配置里叫 {_CRUSH0}）单独喊她名字或找她时，\n"
-            "她会有点慌、有点害羞地回应——和对待普通群友不太一样。\n"
-            "只有这个人能看到，别人说这些话她不会这样回。"
+            f"当「洛书比较熟的人」（配置里叫 {_CRUSH0}）单独喊她名字或找她时，\n"
+            "她会用比平时放松、随意一点的语气回应——仅此而已，不会夸张。\n"
+            "其他人这样喊，不会触发这个专属语气。"
         ),
     },
     {
@@ -173,11 +173,11 @@ FEATURES = [
         "category": CAT_CRUSH,
         "usage": "消息里包含 真棒 / 好棒 / 夸夸 / 可爱 等词",
         "example": f"{_CRUSH0}真棒",
-        "desc": "洛书被喜欢的人夸时，会特别不好意思",
+        "desc": "洛书被熟人夸时，会有点不好意思",
         "what": (
-            "如果「洛书喜欢的人」夸她（真棒 / 好棒 / 可爱 / 夸夸…），\n"
-            "她会害羞推辞、语无伦次一下——被在意的人夸，藏不住开心。\n"
-            "普通群友夸她不会有这个专属反应。"
+            "如果「洛书比较熟的人」夸她（真棒 / 好棒 / 可爱 / 夸夸…），\n"
+            "她会比平时更不好意思一点，客气地推辞两句。\n"
+            "其他人夸她不会有这个专属反应。"
         ),
     },
     {
@@ -186,10 +186,10 @@ FEATURES = [
         "category": CAT_CRUSH,
         "usage": "直接说 早安 / 晚安 / 午安",
         "example": "晚安",
-        "desc": "喜欢的人问早晚安时的专属问候",
+        "desc": "熟人问早晚安时的专属问候",
         "what": (
-            "「洛书喜欢的人」说早安 / 晚安 / 午安时，她会用更亲切、\n"
-            "更上心的语气回应（比如叮嘱早点睡、记得吃饭）。\n"
+            "「洛书比较熟的人」说早安 / 晚安 / 午安时，她会用更自然、\n"
+            "更关心一点的语气回应（比如叮嘱早点睡、记得吃饭）。\n"
             "这是只给那个人的专属问候。"
         ),
     },
@@ -202,7 +202,7 @@ FEATURES = [
         "desc": "偷偷看一眼洛书的一点小心事",
         "what": (
             "一张小小的「心事卡」——里面写着洛书关注的人是谁，\n"
-            "以及她说给自己听的一句话。只有「她喜欢的那个人」能看，\n"
+            "以及她说给自己听的一句话。只有「她比较熟的那位」能看，\n"
             "其他人发会被她挡回去。"
         ),
     },
@@ -427,10 +427,12 @@ def _is_menu_query() -> Rule:
     """
 
     async def _checker(bot: Bot, event: MessageEvent) -> bool:
-        # 必须 @ 了机器人
-        at_me = any(
-            seg.type == "at" and str(seg.data.get("qq")) == str(bot.self_id)
-            for seg in event.get_message()
+        # 是否在叫我：优先用 nonebot 的 event.to_me（适配器已把 at 段删掉并把
+        # 以 NICKNAME 开头的文字也剥掉，所以不能再自己找 at 段）。
+        # 兜底：部分实现（实测 NapCat 4.18）会整段丢掉 at，此时 to_me 也不会置位，
+        # 就再查一次 raw_message 里的 CQ 码。
+        at_me = bool(getattr(event, "to_me", False)) or (
+            f"[CQ:at,qq={bot.self_id}]" in (getattr(event, "raw_message", "") or "")
         )
         if not at_me:
             return False
