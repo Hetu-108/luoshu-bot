@@ -10,7 +10,6 @@
 # 说明：按「用户 + 日期」做种子，同一天结果固定，避免反复刷新。
 # 文案定位为「趣味心情卡」，不涉及算命、预测吉凶等表述。
 # 支持 @他人 或 回复某人消息 来帮对方抽。
-
 import hashlib
 import random
 from datetime import datetime

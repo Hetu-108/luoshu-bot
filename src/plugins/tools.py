@@ -9,7 +9,6 @@
 #   /say <内容>    → 让机器人发言（仅管理员）
 #
 # 注：科学计算 /e 已按要求移除。
-
 import platform
 import time
 

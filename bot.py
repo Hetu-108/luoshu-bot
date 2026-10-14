@@ -10,7 +10,6 @@
 #
 # Windows: 双击 启动bot.bat
 # Linux  : ./start.sh
-
 import os
 import sys
 

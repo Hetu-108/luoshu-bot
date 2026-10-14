@@ -6,7 +6,6 @@
 # 用于 AI 对话的输入与输出检查。
 # 词库放在 data/sensitive_words.txt，一行一个词，# 开头为注释。
 # 文件不存在时会自动生成一份基础词库。
-
 from pathlib import Path
 
 from nonebot.log import logger

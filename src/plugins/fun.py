@@ -15,7 +15,6 @@
 #
 # 注：这个人同时保留管理员权限（/say /model /stat 等），那是技术身份，
 #     与洛书「喜欢谁」这件事无关。其余群友触发这些词不会响应。
-
 import random
 
 from nonebot import get_driver, on_command, on_message

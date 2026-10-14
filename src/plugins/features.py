@@ -18,7 +18,6 @@
 # 存储结构： { "<群号>": { "disabled": ["抽签", "运势"] } }
 # 采用「记录被关闭项」而非「记录开启项」，这样新增功能默认就是开启的，
 # 老群不用做数据迁移。
-
 from typing import Any, Optional, Set
 
 from nonebot import on_command

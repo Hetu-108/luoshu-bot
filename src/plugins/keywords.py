@@ -9,7 +9,6 @@
 #
 # 回复内容用 | 分隔可以配置多条，触发时随机选一条。
 # 匹配支持精确匹配与包含匹配（包含匹配即"模糊匹配"）。
-
 import random
 
 from nonebot import on_command, on_message

@@ -9,7 +9,6 @@
 # 输出牌面名称、正逆位、牌意解读。
 # 每日限抽次数由 cooldown 控制；牌库见 tarot_deck.py（完整 78 张）。
 # 定位为趣味解读，不做吉凶预测。
-
 import hashlib
 import random
 from datetime import datetime

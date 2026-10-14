@@ -7,7 +7,6 @@
 # 新人入群           → 欢迎
 # 有人退群           → 提示
 # 每天 7:00 / 12:00 / 22:00 → 定时问好（可在 .env 关闭）
-
 import random
 
 import nonebot

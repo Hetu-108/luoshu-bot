@@ -5,7 +5,6 @@
 #
 # 这个文件不注册任何指令，只给其它插件调用。
 # 对应任务清单：F-05 权限分级、F-06 指令冷却、F-07 多群隔离、F-09 日志
-
 import json
 import os
 import time

@@ -10,7 +10,6 @@
 # 统计维度：群日活人数、消息总数、指令使用次数排行。
 # 权限：仅群主 / 群管理员 / 管理员可查。
 # 数据按群隔离（F-07），存放在 data/stats.json。
-
 from collections import defaultdict
 from datetime import datetime, timedelta
 
