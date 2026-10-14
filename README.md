@@ -234,10 +234,17 @@ GREETING_ENABLED=true            # 是否开启定时问好
 ├── install.sh / start.sh       Linux 安装与启动脚本
 ├── luoshu.service.example      systemd 服务模板
 ├── 使用说明.txt                 完整使用手册
+├── CHANGELOG.md                更新日志
 ├── 启动bot.bat / 安装依赖.bat    Windows 脚本
 ├── selftest.py                 自检脚本
 └── src/plugins/                各功能插件（ai_chat / fun / fortune …）
 ```
+
+---
+
+## 更新日志
+
+各版本的变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。当前版本：**v1.0.0**。
 
 ---
 
