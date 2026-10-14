@@ -45,6 +45,17 @@
 ollama pull qwen2.5:7b
 ```
 
+**模型怎么选**（按显存从低到高，拉完在 `.env` 里改 `OLLAMA_MODEL` 即可切换）：
+
+| 模型 | 显存 | 说明 |
+| --- | --- | --- |
+| `qwen2.5:3b` | 约 2 GB | 快，效果一般，老机器 / 纯 CPU 可用 |
+| `qwen2.5:7b` | 约 5 GB | **推荐**，日常够用 |
+| `qwen2.5:14b` | 约 10 GB | 效果更好 |
+| `qwen2.5:32b` | 约 20 GB | 最好，需要好显卡 |
+
+> 查已装模型：`ollama list`。
+
 ### 2. Windows
 
 ```text
@@ -54,12 +65,81 @@ ollama pull qwen2.5:7b
 
 ### 3. Linux
 
+**① 装好 Python 与 venv**
+
 ```bash
-./install.sh             # 首次，创建虚拟环境并安装依赖
-./start.sh               # 启动
+# Ubuntu / Debian
+sudo apt install python3 python3-venv python3-pip
+
+# CentOS / RHEL
+sudo yum install python3 python3-pip
 ```
 
-想开机自启 / 崩溃自动重启，参考仓库内的 `luoshu.service.example`（systemd 模板）。
+**② 安装依赖**
+
+```bash
+chmod +x install.sh start.sh
+./install.sh
+```
+
+脚本会自动找 Python 3.10+、创建 `.venv`、装依赖，**不会污染系统 Python**。
+
+**③ 准备配置**
+
+```bash
+cp .env.example .env
+```
+
+重点确认两项（其余见下方「配置」）：
+
+| 配置 | 什么时候改 |
+| --- | --- |
+| `HOST` | 登录端也在本机 → 保持 `127.0.0.1`；登录端在**另一台机器** → 改成 `0.0.0.0`，并**务必在防火墙只放行可信来源** |
+| `OLLAMA_URL` | Ollama 在同机 → `http://127.0.0.1:11434`；在别的机器 → 填那台的地址 |
+
+登录端那边要连 `ws://<本机IP>:8080/onebot/v11/ws`（端口取 `.env` 的 `PORT`）。
+
+**④ 启动**
+
+```bash
+./start.sh
+```
+
+临时后台运行：
+
+```bash
+nohup ./start.sh > luoshu.log 2>&1 &
+```
+
+**⑤ 常驻运行（可选，推荐）**
+
+想开机自启 + 崩溃自动重启，用仓库里的 systemd 模板：
+
+```bash
+# 1. 建一个专用账号（别用 root）
+sudo useradd -r -m -d /opt/luoshu-bot -s /usr/sbin/nologin luoshu
+
+# 2. 把项目放到 /opt/luoshu-bot 并给权限
+sudo chown -R luoshu:luoshu /opt/luoshu-bot
+
+# 3. 复制服务文件，改 User / WorkingDirectory / ExecStart 三处
+sudo cp luoshu.service.example /etc/systemd/system/luoshu.service
+sudo nano /etc/systemd/system/luoshu.service
+
+# 4. 启用
+sudo systemctl daemon-reload
+sudo systemctl enable --now luoshu
+
+# 5. 看状态与日志
+systemctl status luoshu
+journalctl -u luoshu -f
+```
+
+常用操作：`sudo systemctl restart|stop luoshu`。
+
+> ⚠️ 两个坑：
+> - **`.venv` 不能跨系统拷贝** —— Windows 建的 `.venv` 在 Linux 下用不了，必须在 Linux 上重新跑 `./install.sh`。
+> - **用了 systemd 就别再叠加 `nohup`** —— 二选一即可。
 
 启动成功会看到：
 
@@ -103,15 +183,6 @@ GREETING_ENABLED=true            # 是否开启定时问好
 ```
 
 改完保存，**重启机器人**生效。
-
-### 模型怎么选（按显存从低到高）
-
-| 模型 | 显存 | 说明 |
-| --- | --- | --- |
-| `qwen2.5:3b` | 约 2 GB | 快，效果一般，老机器 / 纯 CPU 可用 |
-| `qwen2.5:7b` | 约 5 GB | **推荐**，日常够用 |
-| `qwen2.5:14b` | 约 10 GB | 效果更好 |
-| `qwen2.5:32b` | 约 20 GB | 最好，需要好显卡 |
 
 > 完整配置项、维护方法和常见问题见 [`使用说明.txt`](使用说明.txt)。
 
