@@ -281,11 +281,11 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
     """AI 对话公共逻辑：@触发 / 喊名字 / /ai 命令 共用"""
     text = (text or "").strip()
     if not text:
-        await matcher.finish("唔…你想聊什么呀？直接说内容就行~")
+        await matcher.finish("想聊什么？直接把内容说出来就行～")
 
     # 冷却防刷屏（F-06）
     if not check_cooldown("ai", event, 3):
-        await matcher.finish("说得太快啦，我缓一口气~")
+        await matcher.finish("刷得有点快，我这边跟不上啦，缓一下～")
 
     # 输入敏感词过滤（F-13）
     if has_sensitive(text):
@@ -314,7 +314,7 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
             "多一分自然的关心，语气更随意一些。"
             "但仅此而已——不要刻意撒娇卖萌，不要说肉麻的话，"
             "不要暗示心动、暧昧或恋爱，也不要有任何表白的意味。"
-            "整体还是平时那个内向、腼腆的你，只是和 TA 聊天时更自在一点。"
+            "整体还是平时那个安静、慢热的你，只是和 TA 聊天时更自在一点。"
         )
         system_prompt = system_prompt + master_note
 

@@ -145,13 +145,13 @@ async def main():
     await send("/塔罗", note="F-11 单张")
     await send("/塔罗 三张", note="F-11 三张")
 
-    print("\n========== 心动专属互动（洛书熟人）==========")
+    print("\n========== 熟人专属互动（洛书）==========")
     print(f"  （称呼取自 .env 的 CRUSH_NAMES：{CRUSH1}{'、' + CRUSH2 if CRUSH2 else ''}）")
-    await send(CRUSH1, note="打招呼（昵称1，应略显慌张）")
+    await send(CRUSH1, note="打招呼（昵称1，应自然应答）")
     if CRUSH2:
         await send(CRUSH2, note="打招呼（昵称2）")
     await send("晚安", note="道晚安")
-    await send(f"{CRUSH1}真棒", note="被夸，洛书应特别不好意思")
+    await send(f"{CRUSH1}真棒", note="被夸，应自然接话、不刻意示弱")
     await send("/心事", note="洛书心事卡")
     await send("/心事", user_id=99999999, note="非熟人应被拒")
     await send(CRUSH1, user_id=99999999, note="非熟人打招呼应无响应")

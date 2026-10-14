@@ -3,7 +3,7 @@
 # @File    : fun.py
 # @Usage   : 洛书对「熟人」的专属互动
 #
-# 说明：机器人名为「洛书」，形象是一个可爱、略显内向的小女孩。
+# 说明：机器人名为「洛书」，形象是一个安静、慢热、聊开了话很多的女生。
 #       洛书和群里每个人都是平等的朋友，没有谁是她「主人」。
 #       而「熟人」（.env 的 CRUSH_NAMES，同时也是 SUPERUSERS 里的管理员）
 #       是她相处得更自在的朋友 —— 语气只比别人稍微亲近一点点，
@@ -76,11 +76,11 @@ async def _handle_special_greet(bot: Bot, event: MessageEvent):
     log_command("心动打招呼", event)
     name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
-        f"{name}？我在的，怎么啦~",
-        f"嗯，是{name}呀，我在~",
-        f"{name}找我有事吗？",
-        f"在的在的，{name}你说~",
-        f"唔，{name}？我在呢~",
+        f"在呢，{name}。怎么了？",
+        f"嗯？{name}，你说。",
+        f"我在的，{name}。找我什么事？",
+        f"哟，是{name}。今天怎么样？",
+        f"在的在的，{name}。直接说呗。",
     ]
     await greet_special.finish(random.choice(replies), at_sender=True)
 
@@ -105,11 +105,11 @@ async def _handle_special_praise(bot: Bot, event: MessageEvent):
     log_command("心动夸奖", event)
     name = event.sender.card or event.sender.nickname or _DEFAULT_CALL
     replies = [
-        f"谢谢{name}~ 不过真的没那么厉害啦",
-        f"诶，被{name}夸了…谢谢你呀~",
-        f"唔…{name}这么说，我会不好意思的~",
-        f"嘿嘿，那就谢谢{name}啦~",
-        f"嗯…{name}别乱夸，我会不知道怎么回的~",
+        f"哈哈，谢谢{name}。你今天嘴挺甜。",
+        f"诶，被{name}夸了，还挺开心的。",
+        f"谢啦{name}，不过我也没做什么吧。",
+        f"嗯，{name}这么一说，我心情都好了。",
+        f"哈哈那就算你说得对吧，{name}。",
     ]
     await praise_special.finish(random.choice(replies), at_sender=True)
 
@@ -135,15 +135,15 @@ async def _handle_special_daytime(bot: Bot, event: MessageEvent):
     text = event.get_message().extract_plain_text().strip()
     if text in {"晚安", "睡了", "我睡了"}:
         reply = random.choice([
-            f"{name}晚安，明天见~ 🌙",
-            f"嗯，{name}早点睡，做个好梦~ 💤",
-            f"好，晚安{name}~",
+            f"{name}晚安，做个好梦。",
+            f"嗯，早点睡{name}，别又熬夜。",
+            f"晚安{name}，明天见。",
         ])
     else:
         reply = random.choice([
-            f"{name}早呀，今天也要好好的哦 ☀️",
-            f"早上好{name}，记得吃早饭~",
-            f"{name}午安，记得按时吃饭~ 🍚",
+            f"{name}早，今天也顺顺利利的。",
+            f"早上好{name}，记得吃点东西。",
+            f"{name}午安，吃饭了没？",
         ])
     await daytime_special.finish(reply, at_sender=True)
 
@@ -175,6 +175,6 @@ async def _handle_special_cmd(bot: Bot, event: MessageEvent):
         f"  QQ：{qqs}\n"
         "  关系：平等的好朋友（比较熟的那种）\n"
         "\n"
-        "「TA 和我说话的时候，我好像会比平时放松一点点…」\n"
-        "（@洛书 或喊「洛书」就能找我聊天~）"
+        "「和 TA 说话的时候，我好像比平时放松一点…」\n"
+        "（@洛书 或喊「洛书」就能找我聊天）"
     )
