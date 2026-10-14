@@ -204,8 +204,11 @@ def _status_lines(group_id: Optional[int]) -> list:
             continue
         lines.append(f"【{title}】")
         for f in items:
-            mark = "❌ 已关闭" if f["key"] in disabled else "✅ 开启"
-            lines.append(f"  {f['name']:<6} {mark}")
+            mark = "❌ 已关闭" if f["key"] in disabled else "✅ 开启  "
+            # 中文按显示宽度对齐（中文算 2 格）
+            w = sum(2 if ord(ch) > 127 else 1 for ch in f["name"])
+            pad = " " * max(1, 12 - w)
+            lines.append(f"  {f['name']}{pad}{mark}")
         lines.append("")
     return lines
 
@@ -270,7 +273,25 @@ async def _handle_fs(bot: Bot, event: MessageEvent, arg: Message = CommandArg())
         if locked:
             out.append(f"「{'、'.join(locked)}」是管理功能，不能关闭，已跳过。")
         if bad:
-            out.append(f"没找到功能：{'、'.join(bad)}")
+            # 区分三类：机器人管理员专属命令 / 保护项（不可关） / 纯粹拼错了
+            admin_cmds = {"stat", "say", "model", "status", "状态", "代言", "发言", "模型"}
+            protect = {"功能", "功能开关", "开关", "帮助", "help", "h", "菜单"}
+            advise, lock_bad, wrong = [], [], []
+            for n in bad:
+                low = n.lower()
+                if low in admin_cmds:
+                    advise.append(n)
+                elif n in protect or low in protect:
+                    lock_bad.append(n)
+                else:
+                    wrong.append(n)
+            if advise:
+                out.append(f"「{'、'.join(advise)}」是机器人管理员专属命令，不按群开关。")
+            if lock_bad:
+                out.append(f"「{'、'.join(lock_bad)}」不能被关闭（关了就找不回来了）。")
+            if wrong:
+                out.append(f"没找到功能：{'、'.join(wrong)}")
+            out.append("发 /功能 可以看本群支持开关的全部功能名。")
         if not out:
             out.append("没有可执行的操作。")
         out.append("（仅影响本群）")
