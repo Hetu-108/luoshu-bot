@@ -39,7 +39,17 @@
 > 登录端（负责让机器人登入 QQ）不包含在本仓库内，请自行准备，并让它连接到
 > `ws://127.0.0.1:8080/onebot/v11/ws`。
 
-### 1. 拉取模型
+### 1. 获取代码
+
+```bash
+git clone https://github.com/Hetu-108/luoshu-bot.git
+cd luoshu-bot
+```
+
+> 不想用 git，也可以直接点仓库页面的 **Code → Download ZIP** 下载解压。
+> 想装某个已发布版本，见 [Releases](https://github.com/Hetu-108/luoshu-bot/releases)。
+
+### 2. 拉取模型
 
 ```bash
 ollama pull qwen2.5:7b
@@ -56,14 +66,14 @@ ollama pull qwen2.5:7b
 
 > 查已装模型：`ollama list`。
 
-### 2. Windows
+### 3. Windows
 
 ```text
 1. 双击「安装依赖.bat」   （首次，创建虚拟环境并安装依赖）
 2. 双击「启动bot.bat」
 ```
 
-### 3. Linux
+### 4. Linux
 
 **① 装好 Python 与 venv**
 
