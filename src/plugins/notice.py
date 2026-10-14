@@ -105,20 +105,37 @@ async def _handle_decrease(bot: Bot, event: GroupDecreaseNoticeEvent):
 # ==================== 定时问好 ====================
 async def _broadcast(text: str):
     """向配置的群（或所有群）发送问候"""
-    bot = nonebot.get_bot()
+    try:
+        bot = nonebot.get_bot()
+    except Exception as e:
+        # 拿不到 bot 通常意味着连接还没建立或已断开，记清楚原因便于排查
+        logger.error(f"[notice] 定时问候取 bot 失败（可能未连接）: {type(e).__name__}: {e}")
+        return
+
     try:
         if GREETING_GROUPS:
             targets = [int(g) for g in GREETING_GROUPS]
         else:
             group_list = await bot.get_group_list()
             targets = [g["group_id"] for g in group_list]
-        for gid in targets:
-            try:
-                await bot.send_group_msg(group_id=gid, message=text)
-            except Exception as e:
-                logger.warning(f"[notice] 向群 {gid} 发送问候失败: {e}")
     except Exception as e:
-        logger.error(f"[notice] 定时问候失败: {e}")
+        logger.error(
+            f"[notice] 定时问候获取群列表失败: {type(e).__name__}: {e}"
+        )
+        return
+
+    sent = 0
+    failed = 0
+    for gid in targets:
+        try:
+            await bot.send_group_msg(group_id=gid, message=text)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(
+                f"[notice] 向群 {gid} 发送问候失败: {type(e).__name__}: {e}"
+            )
+    logger.info(f"[notice] 定时问候完成：成功 {sent} 个群，失败 {failed} 个群")
 
 
 MORNING = [

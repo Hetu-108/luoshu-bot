@@ -23,15 +23,45 @@ _store = JsonStore("keywords.json")
 
 MANAGE_ROLE = ROLE_GROUP_ADMIN
 
+# 单群关键词数量上限，防止有人（或损坏的文件）塞入海量条目拖垮回复
+MAX_KEYWORDS = 200
+# 单条关键词的触发词/单条回复长度上限
+MAX_TRIGGER_LEN = 50
+MAX_REPLY_LEN = 500
+
+
+def _sanitize(data: dict) -> dict:
+    """校验并清洗关键词表：丢弃结构非法/超长的条目。
+
+    防的是「绕过 bot 权限、直接手改 keywords.json」的情况——
+    当然也能顺带修好被写坏的正常数据。
+    """
+    if not isinstance(data, dict):
+        return {}
+    clean = {}
+    for k, v in data.items():
+        if not isinstance(k, str) or not isinstance(v, list):
+            continue
+        trigger = k.strip()
+        if not trigger or len(trigger) > MAX_TRIGGER_LEN:
+            continue
+        replies = [str(r).strip() for r in v if str(r).strip()]
+        replies = [r for r in replies if len(r) <= MAX_REPLY_LEN]
+        if replies:
+            clean[trigger] = replies
+        if len(clean) >= MAX_KEYWORDS:
+            break
+    return clean
+
 
 def _get_map(event: MessageEvent) -> dict:
     gid = event.group_id if hasattr(event, "group_id") else None
-    return _store.get(gid, "keywords", {}) or {}
+    return _sanitize(_store.get(gid, "keywords", {}) or {})
 
 
 def _save_map(event: MessageEvent, data: dict) -> None:
     gid = event.group_id if hasattr(event, "group_id") else None
-    _store.put(gid, "keywords", data)
+    _store.put(gid, "keywords", _sanitize(data))
 
 
 # ==================== 管理命令 ====================

@@ -12,8 +12,9 @@
 # 数据按群隔离（F-07），存放在 data/stats.json。
 from collections import defaultdict
 from datetime import datetime, timedelta
+import time
 
-from nonebot import on_command, on_message
+from nonebot import on_command, on_message, get_driver
 from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message, GroupMessageEvent
 from nonebot.params import CommandArg
 from nonebot.rule import Rule
@@ -24,6 +25,36 @@ from .features import guard
 _store = JsonStore("stats.json")
 
 STATS_ROLE = ROLE_GROUP_ADMIN
+
+
+# 进程退出前把未落盘的统计刷入磁盘，尽量避免丢失
+@get_driver().on_shutdown
+async def _flush_on_shutdown():
+    _flush()
+
+# 批量写入：高频消息不每条都落盘，累计到阈值或超过时间间隔才保存，
+# 显著降低磁盘 I/O；进程退出前会 flush 一次，尽量不丢数据。
+_FLUSH_EVERY = 100          # 累计 100 次改动落盘一次
+_FLUSH_INTERVAL = 60        # 或每 60 秒至少落盘一次
+_dirty = 0                  # 自上次落盘以来累计的改动次数
+_last_flush = time.time()   # 上次落盘时间
+
+
+def _mark_dirty() -> None:
+    """标记有一次改动；达到阈值或超时则真正落盘"""
+    global _dirty, _last_flush
+    _dirty += 1
+    now = time.time()
+    if _dirty >= _FLUSH_EVERY or (now - _last_flush) >= _FLUSH_INTERVAL:
+        _flush()
+
+
+def _flush() -> None:
+    """强制把内存中的数据落盘"""
+    global _dirty, _last_flush
+    _store.save()
+    _dirty = 0
+    _last_flush = time.time()
 
 
 # ==================== 记录 ====================
@@ -44,7 +75,9 @@ def record_message(event: GroupMessageEvent) -> None:
     if uid not in entry["users"]:
         entry["users"].append(uid)
 
-    _store.put(gid, "daily", day)
+    # 改写内存副本后标记待落盘（不直接 put，避免每条消息都写文件）
+    _store.set_group(gid, {**_store.get_group(gid), "daily": day})
+    _mark_dirty()
 
 
 def record_command(group_id, cmd: str) -> None:
@@ -55,7 +88,8 @@ def record_command(group_id, cmd: str) -> None:
     day = _store.get(group_id, "daily", {}) or {}
     entry = day.setdefault(date, {"messages": 0, "users": [], "commands": {}})
     entry["commands"][cmd] = entry["commands"].get(cmd, 0) + 1
-    _store.put(group_id, "daily", day)
+    _store.set_group(group_id, {**_store.get_group(group_id), "daily": day})
+    _mark_dirty()
 
 
 # 自动记录每条群消息（优先级最低，不影响其它功能）
@@ -97,6 +131,7 @@ stats = on_command("统计", aliases={"stats", "数据"}, rule=guard("stats"), p
 
 @stats.handle()
 async def _handle_stats(bot: Bot, event: MessageEvent, arg: Message = CommandArg()):
+    _flush()  # 先把攒着的统计落盘，保证读到的是最新数据
     role = await get_role(bot, event)
     if role < STATS_ROLE:
         await stats.finish("只有群主 / 群管理员 / 管理员可以查看统计数据哦。")

@@ -50,6 +50,9 @@ SESSION_FILE = DATA_DIR / "ai_sessions.json"
 _sessions: dict = {}
 _lock = asyncio.Lock()
 
+# 会话过期：超过该天数未活动的会话，在保存时顺手清理（避免文件与内存无限膨胀）
+SESSION_TTL_DAYS = int(getattr(cfg, "ai_session_ttl_days", 30))
+
 
 def _load_sessions() -> dict:
     try:
@@ -60,7 +63,25 @@ def _load_sessions() -> dict:
         return {}
 
 
+def _prune_sessions() -> None:
+    """清理长期未活动的会话（按 last_active 时间戳）。必须在持锁时调用。"""
+    if SESSION_TTL_DAYS <= 0:
+        return
+    import time
+
+    deadline = time.time() - SESSION_TTL_DAYS * 86400
+    stale = [
+        k for k, v in _sessions.items()
+        if isinstance(v, dict) and v.get("last_active", 0) and v["last_active"] < deadline
+    ]
+    for k in stale:
+        _sessions.pop(k, None)
+    if stale:
+        logger.info(f"[ai_chat] 已清理 {len(stale)} 个过期会话（>{SESSION_TTL_DAYS} 天未活动）")
+
+
 def _save_sessions() -> None:
+    _prune_sessions()
     try:
         tmp = SESSION_FILE.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -68,6 +89,11 @@ def _save_sessions() -> None:
         os.replace(tmp, SESSION_FILE)
     except Exception as e:
         logger.error(f"[ai_chat] 保存会话失败: {e}")
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
 
 
 _sessions = _load_sessions()
@@ -81,22 +107,36 @@ def _session_key(event: MessageEvent, bot: Bot) -> str:
 
 
 def _get_session(key: str) -> dict:
+    import time
+
     if key not in _sessions:
         _sessions[key] = {"persona": DEFAULT_PERSONA, "model": OLLAMA_MODEL, "history": []}
     sess = _sessions[key]
     sess.setdefault("persona", DEFAULT_PERSONA)
     sess.setdefault("model", OLLAMA_MODEL)
     sess.setdefault("history", [])
+    sess["last_active"] = time.time()  # 每次访问刷新活动时间
     return sess
 
 
 # ==================== Ollama 调用 ====================
+# 健康状态标志：启动自检失败后置 False，用户请求时据此快速失败，
+# 不再干等 180 秒超时；后台成功调用一次后会自动恢复为 True。
+_ollama_ok: bool = True
+
+
 async def ask_ollama(
     messages: list,
     model: str,
     temperature: float = 0.8,
 ) -> str:
     """调用 Ollama /api/chat，返回助手回复文本"""
+    global _ollama_ok
+    # 已知服务不可用时，直接快速失败，避免每次请求都卡满超时
+    if not _ollama_ok:
+        raise RuntimeError(
+            f"本地模型服务当前不可用（{OLLAMA_URL}）。请启动 Ollama 后稍等片刻再试。"
+        )
     payload = {
         "model": model,
         "messages": messages,
@@ -112,8 +152,10 @@ async def ask_ollama(
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()
+            _ollama_ok = True  # 成功即恢复健康标志
             return (data.get("message") or {}).get("content", "").strip()
     except httpx.ConnectError:
+        _ollama_ok = False
         raise RuntimeError(f"连接不上本地模型服务 {OLLAMA_URL}，请确认 Ollama 已启动")
     except httpx.ReadTimeout:
         raise RuntimeError(f"模型响应超时（{OLLAMA_TIMEOUT:.0f}秒），可能问题太复杂或显存不足")
@@ -220,7 +262,9 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
         sess = _get_session(key)
         persona_name = sess["persona"]
         model = sess["model"]
-        history: list = sess["history"]
+        # 快照一份历史副本：后续在锁外调用模型期间，别处可能改写 sess["history"]，
+        # 直接引用列表会读到"半新半旧"的数据。这里复制成独立列表再拼消息。
+        history: list = list(sess["history"])
 
     system_prompt = PERSONAS.get(persona_name, PERSONAS[DEFAULT_PERSONA])
 
@@ -260,7 +304,10 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
         log_event("SAFE", "AI输出命中敏感词，已过滤")
         reply = filter_text(reply)
 
-    # 写回历史
+    # 写回历史。
+    # 注意：模型调用在锁外进行，期间同一会话可能有另一个请求也调完模型回来了。
+    # 若这里直接覆盖 sess["history"]，就会把对方的对话挤掉（竞争条件）。
+    # 因此改为「追加 + 按时间裁剪」，只在锁内做最小粒度的追加，不整表替换。
     async with _lock:
         sess = _get_session(key)
         sess["history"].append({"role": "user", "content": text})
@@ -297,21 +344,59 @@ async def _handle_ai_cmd(bot: Bot, event: MessageEvent, arg: Message = CommandAr
     await _do_chat(ai_cmd, bot, event, arg.extract_plain_text())
 
 
+# 句子结束符：切分时优先在这些字符后面断开，避免把一句话劈成两半
+_SENT_END = "。！？!?…；;\n"
+# 段落/分行符优先级最高
+
+
 def _split_message(text: str, limit: int = 800) -> list:
-    """按段落把长文本切分成不超过 limit 的片段"""
+    """把长文本切分成不超过 limit 的片段。
+
+    切分优先级：段落换行 > 句子结束符（。！？等）> 逗号 > 硬切。
+    这样尽量不会把一句话、一个代码块从中间截断。
+    """
     if len(text) <= limit:
         return [text]
+
+    # 先按换行切成"行"，再逐行塞进缓冲区；单行超长时按句子边界再切
     parts = []
     buf = ""
+
+    def _flush_soft(line: str) -> list:
+        """把一条超长行按句子边界切成若干不超过 limit 的块"""
+        chunks = []
+        cur = ""
+        for ch in line:
+            if len(cur) + 1 > limit:
+                # 到上限了，尝试回退到最近的句子结束符
+                cut = _last_sentence_break(cur)
+                if cut > 0:
+                    chunks.append(cur[:cut])
+                    cur = cur[cut:]
+                else:
+                    chunks.append(cur)
+                    cur = ""
+            cur += ch
+        if cur:
+            chunks.append(cur)
+        return chunks
+
+    def _last_sentence_break(s: str) -> int:
+        """在 s 中找最后一个句子结束符的位置（返回其后一位），找不到返回 0"""
+        for i in range(len(s) - 1, max(-1, len(s) - 120), -1):
+            if s[i] in "。！？!?…；;":
+                return i + 1
+        return 0
+
     for line in text.split("\n"):
         if len(buf) + len(line) + 1 > limit:
             if buf:
                 parts.append(buf)
-            # 单行超长再硬切
-            while len(line) > limit:
-                parts.append(line[:limit])
-                line = line[limit:]
-            buf = line
+                buf = ""
+            if len(line) > limit:
+                parts.extend(_flush_soft(line))
+            else:
+                buf = line
         else:
             buf = f"{buf}\n{line}" if buf else line
     if buf:
@@ -441,15 +526,19 @@ driver = get_driver()
 @driver.on_startup
 async def _check_ollama_on_startup():
     """启动时检查本地模型是否可用，不可用则告警（不阻断启动）"""
+    global _ollama_ok
     models = await _list_models()
     if not models:
+        _ollama_ok = False
         logger.error(f"[ai_chat] 无法连接本地模型服务 {OLLAMA_URL}，AI 对话将不可用")
         log_event("STARTUP", f"Ollama 连接失败 {OLLAMA_URL}")
         await notify_owner(
             f"启动时连不上本地模型服务（{OLLAMA_URL}）。\n"
-            f"请确认 Ollama 已启动，然后重启机器人。"
+            f"请确认 Ollama 已启动，然后重启机器人。\n"
+            f"（在你恢复之前，AI 对话会直接提示不可用，不会让你干等超时）"
         )
     else:
+        _ollama_ok = True
         logger.info(f"[ai_chat] 本地模型可用：{', '.join(models)}")
         log_event("STARTUP", f"Ollama 正常，模型：{','.join(models)}")
         await notify_owner(f"机器人已上线，本地模型正常（当前默认：{OLLAMA_MODEL}）")

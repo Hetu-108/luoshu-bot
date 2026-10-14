@@ -72,8 +72,10 @@ async def get_role(bot: Bot, event: MessageEvent) -> int:
             return ROLE_GROUP_OWNER
         if r == "admin":
             return ROLE_GROUP_ADMIN
-    except Exception:
-        pass
+    except Exception as e:
+        # 查询失败（如适配器不支持、网络异常）时降级为普通成员，
+        # 但记录一条日志便于排查，别静默吞掉。
+        logger.debug(f"[core] get_group_member_info 失败，降级为普通成员: {e}")
     return ROLE_MEMBER
 
 
@@ -86,6 +88,16 @@ async def require_role(bot: Bot, event: MessageEvent, need: int) -> bool:
 # ==================== F-06 指令冷却 ====================
 # key: (指令名, 群号, 用户号) -> 上次触发时间戳
 _cooldown: dict = {}
+# 冷却记录清理：当条目数超过阈值时，顺带清掉已过期的 key，避免无限增长
+_COOLDOWN_MAX = 2000
+
+
+def _prune_cooldown(now: float, keep_seconds: int = 3600) -> None:
+    """清理 _cooldown 中超过 keep_seconds 未更新的条目（内存泄漏防护）"""
+    if len(_cooldown) <= _COOLDOWN_MAX:
+        return
+    for k in [k for k, t in _cooldown.items() if now - t > keep_seconds]:
+        _cooldown.pop(k, None)
 
 
 def check_cooldown(cmd: str, event: MessageEvent, seconds: int) -> bool:
@@ -102,6 +114,7 @@ def check_cooldown(cmd: str, event: MessageEvent, seconds: int) -> bool:
     if now - last < seconds:
         return False
     _cooldown[key] = now
+    _prune_cooldown(now)
     return True
 
 
@@ -133,13 +146,22 @@ class JsonStore:
             return {}
 
     def save(self) -> None:
+        # 原子写入：先写临时文件，成功后再 os.replace 覆盖正式文件。
+        # 关键点：json.dump 中途若抛异常（磁盘满 / 权限问题），临时文件会残留
+        # 一份「半截 JSON」。必须清理，否则下次写入可能读到损坏内容。
+        # 另外返回值应能反映成败，方便上层决定是否重试（默认仍保持无返回值）。
+        tmp = self.path.with_suffix(".tmp")
         try:
-            tmp = self.path.with_suffix(".tmp")
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
             os.replace(tmp, self.path)
         except Exception as e:
             logger.error(f"[core] 保存 {self.path.name} 失败: {e}")
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
 
     @staticmethod
     def _gk(group_id: Optional[int]) -> str:
@@ -189,8 +211,9 @@ def log_command(cmd: str, event: MessageEvent) -> None:
             # 指令消息同样计入消息总数与活跃人数，保证统计口径完整
             record_message(event)
             record_command(event.group_id, cmd)
-        except Exception:
-            pass
+        except Exception as e:
+            # 统计失败不应影响指令本身，但要留下痕迹便于排查
+            logger.debug(f"[core] 记录统计失败: {e}")
 
 
 async def notify_owner(msg: str) -> None:
