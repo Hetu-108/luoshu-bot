@@ -6,11 +6,9 @@
 # 用于 AI 对话的输入与输出检查。
 # 词库放在 data/sensitive_words.txt，一行一个词，# 开头为注释。
 # 文件不存在时会自动生成一份基础词库。
-from pathlib import Path
-
 from nonebot.log import logger
+from .core import DATA_DIR
 
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 WORD_FILE = DATA_DIR / "sensitive_words.txt"
 
 # 基础词库（可在 data/sensitive_words.txt 中自行增删）
@@ -128,17 +126,38 @@ def has_sensitive(text: str) -> bool:
 
 
 def filter_text(text: str, replacement: str = "***") -> str:
-    """把敏感词替换成占位符（含大小写不敏感）"""
+    """检测与替换使用同一归一化规则，并映射回原文的位置。"""
     if not text:
         return text
     import re
-
-    result = text
+    normalized, positions = [], []
+    for index, char in enumerate(text):
+        part = _normalize(char)
+        normalized.extend(part)
+        positions.extend([index] * len(part))
+    normalized = "".join(normalized)
+    spans = []
     for w in _words:
-        if w.lower() in result.lower():
-            # 大小写不敏感替换
-            result = re.sub(re.escape(w), replacement, result, flags=re.IGNORECASE)
-    return result
+        spans.extend((m.start(), m.end()) for m in re.finditer(re.escape(w), text, flags=re.IGNORECASE))
+        word = _normalize(w)
+        if not word:
+            continue
+        start = 0
+        while (found := normalized.find(word, start)) >= 0:
+            spans.append((positions[found], positions[found + len(word) - 1] + 1))
+            start = found + 1
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    result, cursor = [], 0
+    for start, end in merged:
+        result.extend([text[cursor:start], replacement])
+        cursor = end
+    result.append(text[cursor:])
+    return "".join(result)
 
 
 def is_safe(text: str) -> bool:

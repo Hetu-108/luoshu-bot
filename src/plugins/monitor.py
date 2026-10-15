@@ -79,12 +79,18 @@ def install_exception_hook():
         logger.error(f"[monitor] 未捕获异常：{detail}")
         log_event("EXCEPTION", detail.replace("\n", " | ")[:500])
         try:
-            asyncio.ensure_future(notify_owner(f"发生未捕获异常：\n{msg or exc}"))
+            if _should_alert(f"exception-{type(exc).__name__}"):
+                loop.create_task(notify_owner(f"发生未捕获异常：\n{msg or exc}"))
         except Exception:
             pass
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         loop.set_exception_handler(_handle)
     except Exception as e:
         logger.warning(f"[monitor] 安装异常钩子失败: {e}")
+
+
+@driver.on_startup
+async def _install_exception_hook_on_startup():
+    install_exception_hook()
