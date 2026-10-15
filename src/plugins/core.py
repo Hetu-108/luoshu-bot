@@ -21,8 +21,36 @@ cfg = driver.config
 
 _OWNER_QQ = [str(q) for q in (getattr(cfg, "superusers", []) or [])]
 
+
+def parse_ids(raw) -> list[str]:
+    """兼容 NoneBot 自定义环境变量的 JSON 字符串与已解析数组。"""
+    if isinstance(raw, str):
+        raw = json.loads(raw) if raw.strip().startswith("[") else raw.split(",")
+    values = [str(q).strip() for q in (raw or []) if str(q).strip()]
+    if any(not q.isdigit() or int(q) <= 0 for q in values):
+        raise ValueError("QQ/群号列表必须是正整数数组")
+    return values
+
+
+_raw_familiar = getattr(cfg, "familiar_users", None)
+FAMILIAR_USERS = set(_OWNER_QQ if _raw_familiar is None else parse_ids(_raw_familiar))
+
+
+def is_familiar(event: MessageEvent) -> bool:
+    """熟人互动与管理权限独立；未配置时兼容原有管理员互动。"""
+    return str(event.get_user_id()) in FAMILIAR_USERS
+
+
+def addressed_text(event: MessageEvent, names: list[str]) -> str:
+    """恢复被适配器短昵称抢先截断的原文（例如“洛”抢先匹配“洛书”）。"""
+    from nonebot.adapters.onebot.v11 import Message
+    raw = Message(getattr(event, "raw_message", "") or "").extract_plain_text().strip()
+    if any(raw.startswith(name) for name in names if name):
+        return raw
+    return event.get_message().extract_plain_text().strip()
+
 # ==================== 路径 ====================
-DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
+DATA_DIR = Path(getattr(cfg, "data_dir", Path(__file__).resolve().parent.parent.parent / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -88,6 +116,7 @@ async def require_role(bot: Bot, event: MessageEvent, need: int) -> bool:
 # ==================== F-06 指令冷却 ====================
 # key: (指令名, 群号, 用户号) -> 上次触发时间戳
 _cooldown: dict = {}
+_cooldown_duration: dict = {}
 # 冷却记录清理：当条目数超过阈值时，顺带清掉已过期的 key，避免无限增长
 _COOLDOWN_MAX = 2000
 
@@ -98,6 +127,7 @@ def _prune_cooldown(now: float, keep_seconds: int = 3600) -> None:
         return
     for k in [k for k, t in _cooldown.items() if now - t > keep_seconds]:
         _cooldown.pop(k, None)
+        _cooldown_duration.pop(k, None)
 
 
 def check_cooldown(cmd: str, event: MessageEvent, seconds: int) -> bool:
@@ -114,6 +144,7 @@ def check_cooldown(cmd: str, event: MessageEvent, seconds: int) -> bool:
     if now - last < seconds:
         return False
     _cooldown[key] = now
+    _cooldown_duration[key] = seconds
     _prune_cooldown(now)
     return True
 
@@ -122,7 +153,8 @@ def cooldown_remain(cmd: str, event: MessageEvent) -> int:
     """返回剩余冷却秒数（用于提示）"""
     gid = event.group_id if isinstance(event, GroupMessageEvent) else 0
     key = (cmd, gid, str(event.get_user_id()))
-    return max(0, int(_cooldown.get(key, 0) + 0 - time.time()))
+    import math
+    return max(0, math.ceil(_cooldown.get(key, 0) + _cooldown_duration.get(key, 0) - time.time()))
 
 
 # ==================== F-07 多群隔离存储 ====================
@@ -149,11 +181,13 @@ class JsonStore:
         # 原子写入：先写临时文件，成功后再 os.replace 覆盖正式文件。
         # 关键点：json.dump 中途若抛异常（磁盘满 / 权限问题），临时文件会残留
         # 一份「半截 JSON」。必须清理，否则下次写入可能读到损坏内容。
-        # 另外返回值应能反映成败，方便上层决定是否重试（默认仍保持无返回值）。
+        # 写入失败继续抛出异常，避免上层向用户报告“保存成功”。
         tmp = self.path.with_suffix(".tmp")
         try:
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp, self.path)
         except Exception as e:
             logger.error(f"[core] 保存 {self.path.name} 失败: {e}")
@@ -162,6 +196,7 @@ class JsonStore:
                     tmp.unlink()
             except OSError:
                 pass
+            raise
 
     @staticmethod
     def _gk(group_id: Optional[int]) -> str:
@@ -206,10 +241,7 @@ def log_command(cmd: str, event: MessageEvent) -> None:
 
     if isinstance(event, GroupMessageEvent):
         try:
-            from .stats import record_message, record_command
-
-            # 指令消息同样计入消息总数与活跃人数，保证统计口径完整
-            record_message(event)
+            from .stats import record_command
             record_command(event.group_id, cmd)
         except Exception as e:
             # 统计失败不应影响指令本身，但要留下痕迹便于排查

@@ -15,7 +15,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message
 from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
-from .core import get_role, ROLE_NAMES, log_command
+from .core import get_role, ROLE_NAMES, log_command, addressed_text
 
 # ==================== 机器人称呼 / 帮助词（与 ai_chat.py 保持一致） ====================
 _cfg = get_driver().config
@@ -464,7 +464,7 @@ def _called_help() -> Rule:
     """
 
     async def _checker(bot: Bot, event: MessageEvent) -> bool:
-        text = event.get_message().extract_plain_text().strip()
+        text = addressed_text(event, _ALL_NAMES)
 
         # 去掉句首的机器人称呼（洛书 / 洛洛 / 小洛 / 洛）
         rest = text

@@ -23,6 +23,7 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.log import logger
 
 from .features import guard
+from .core import parse_ids
 
 scheduler = require("nonebot_plugin_apscheduler").scheduler
 
@@ -30,7 +31,7 @@ driver = get_driver()
 cfg = driver.config
 
 GREETING_ENABLED = str(getattr(cfg, "greeting_enabled", "true")).lower() in ("true", "1", "yes")
-GREETING_GROUPS = list(getattr(cfg, "greeting_groups", []) or [])
+GREETING_GROUPS = [int(g) for g in parse_ids(getattr(cfg, "greeting_groups", []))]
 
 
 # ==================== 戳一戳 ====================
