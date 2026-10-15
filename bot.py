@@ -12,6 +12,7 @@
 # Linux  : ./start.sh
 import os
 import sys
+from pathlib import Path
 
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -43,11 +44,15 @@ try:
 
     # 加载 src/plugins 下的所有插件（见 pyproject.toml）
     nonebot.load_from_toml("pyproject.toml")
+    expected = {p.stem for p in Path("src/plugins").glob("*.py") if not p.name.startswith("_")}
+    missing = expected - {p.name for p in nonebot.get_loaded_plugins()}
+    if missing:
+        raise RuntimeError(f"插件加载失败：{', '.join(sorted(missing))}")
 
 except Exception as e:
     print(f"启动出错，请查看群文件常见问题：{e}")
     _pause_if_windows()
-    raise SystemExit
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":
@@ -61,5 +66,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"运行出错，请查看群文件常见问题：{e}")
         _pause_if_windows()
-        raise SystemExit
+        raise SystemExit(1)
 

@@ -15,7 +15,7 @@ from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message
 from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
-from .core import get_role, ROLE_NAMES, log_command
+from .core import get_role, ROLE_NAMES, log_command, addressed_text
 
 # ==================== 机器人称呼 / 帮助词（与 ai_chat.py 保持一致） ====================
 _cfg = get_driver().config
@@ -60,6 +60,18 @@ CAT_CRUSH = "心动专属"
 #   "desc"    —— 总览里的一句话（尽量说"干什么用"，别只重复名字）
 #   "what"    —— 详情页的通俗解释（它做什么 / 什么时候用）
 FEATURES = [
+    {
+        "name": "科普答题", "aliases": ["答", "答题", "督师", "科普", "排行", "我的成绩"],
+        "category": "科普答题", "usage": "私聊 /答 A 或 /答 Q0001 A；/排行；私聊 /我的成绩",
+        "example": "/答 Q0001 B", "desc": "人工天文题库，私聊提交，截止后统一结算",
+        "what": "管理员录题和发布，群成员私聊作答，首次提交有效。默认答对1分、答错0分，截止后公布答案和成绩。进行中的题不提前进入排行榜。",
+    },
+    {
+        "name": "答题管理", "aliases": ["出题", "题库", "预览", "改题", "删题", "发题", "答案", "导入题库", "查分", "调分", "导出", "同步", "答题设置", "答题总览"],
+        "category": "科普答题", "usage": "管理员私聊 /出题、/题库、/预览 Q0001、/答题设置、/答题总览",
+        "example": "/发题 Q0001", "desc": "录题、排期、发布、结算、导出与调分（仅机器人管理员）",
+        "what": "每天默认北京时间20:00发题、次日20:00截止。支持JSON/Excel导入；删除需要确认；调分留痕。腾讯文档未配置时本地保存，稍后补传。",
+    },
     # ---- AI 对话 ----
     {
         "name": "AI对话",
@@ -72,6 +84,32 @@ FEATURES = [
             "让洛书用本地大模型跟你对话，像和群友聊天一样。\n"
             "她会记住上下文（默认最近 20 轮），所以可以接着上一句说。\n"
             "三种喊法：@她、句首喊名字、或 /ai。所有人都能用。"
+        ),
+    },
+    {
+        "name": "识图 /识图",
+        "aliases": ["识图", "看图", "读图"],
+        "category": "AI 对话",
+        "usage": "/识图 <问题> + 图片\n  或 回复一张图片发送 /识图 <问题>",
+        "example": "/识图 帮我读出截图里的文字（同一条消息附图）",
+        "desc": "看图描述、读取截图文字、根据图片回答问题",
+        "what": (
+            "把图片和问题一起发给我，或回复图片发送 /识图；不写问题时会描述图片和清晰可见的文字。\n"
+            "群里也可 @我 加图片，私聊可直接发图。一次最多3张，每张8MB。\n"
+            "识图共用AI对话开关，需要当前模型支持图片。图片只传入本轮，追问细节请再次附图。"
+        ),
+    },
+    {
+        "name": "模型后端 /后端",
+        "aliases": ["后端", "backend", "模型后端", "云端", "本地"],
+        "category": "AI 对话",
+        "usage": "/后端            查看当前后端\n  /后端 本地       管理员切回Ollama\n  /后端 云端       管理员使用已配置的云端API",
+        "example": "/后端",
+        "desc": "查看或切换本地Ollama与云端API",
+        "what": (
+            "任何人可查看，切换仅机器人管理员可用，且只影响当前用户的当前群/私聊会话。\n"
+            "切换后端会清空历史。云端模式会发送新对话和本轮附图到服务器配置的API；不会自动将本地请求转到云端。\n"
+            "云端地址、Key、模型名只在服务器配置，不通过QQ命令录入。"
         ),
     },
     {
@@ -285,13 +323,12 @@ FEATURES = [
         "name": "模型切换 /model",
         "aliases": ["model", "模型", "模型切换", "换模型"],
         "category": CAT_OWNER,
-        "usage": "/model             看看当前模型和本机有哪些\n  /model <模型名>    切换",
+        "usage": "/model             查看当前后端的模型\n  /model <模型名>    切换当前会话的模型",
         "example": "/model qwen2.5:14b",
-        "desc": "给 AI 换个「脑子」（本地大模型）",
+        "desc": "修改当前后端的模型（本地或云端）",
         "what": (
-            "洛书的 AI 能力来自本机跑的 Ollama 模型。这条命令可以查当前用的是哪个，\n"
-            "以及本机还装了哪些，然后换一个。\n"
-            "模型越大越聪明也越吃显存，不确定就先用默认的。仅机器人管理员可用。"
+            "本地后端可查看Ollama已有模型；云端后端使用配置的API，模型名须由服务商支持。\n"
+            "本地和云端分别保留所选模型，不修改后端类型，也不改变其他人的会话。仅机器人管理员可用。"
         ),
     },
     {
@@ -325,7 +362,7 @@ FEATURES = [
 ]
 
 # 分类顺序
-CATEGORY_ORDER = ["AI 对话", "娱乐", CAT_CRUSH, "管理", CAT_OWNER]
+CATEGORY_ORDER = ["AI 对话", "科普答题", "娱乐", CAT_CRUSH, "管理", CAT_OWNER]
 
 
 def _name_keys(name: str) -> list:
@@ -464,7 +501,7 @@ def _called_help() -> Rule:
     """
 
     async def _checker(bot: Bot, event: MessageEvent) -> bool:
-        text = event.get_message().extract_plain_text().strip()
+        text = addressed_text(event, _ALL_NAMES)
 
         # 去掉句首的机器人称呼（洛书 / 洛洛 / 小洛 / 洛）
         rest = text

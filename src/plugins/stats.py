@@ -14,8 +14,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import time
 
-from nonebot import on_command, on_message, get_driver
-from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message, GroupMessageEvent
+from nonebot import on_command, get_driver, require
+from nonebot.message import event_preprocessor
+from nonebot.adapters.onebot.v11 import MessageEvent, Bot, Message, GroupMessageEvent, Event
 from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
@@ -92,23 +93,20 @@ def record_command(group_id, cmd: str) -> None:
     _mark_dirty()
 
 
-# 自动记录每条群消息（优先级最低，不影响其它功能）
-def _track_rule() -> Rule:
-    async def _checker(event: MessageEvent) -> bool:
-        return isinstance(event, GroupMessageEvent)
-
-    return Rule(_checker)
-
-
-tracker = on_message(rule=_track_rule(), priority=99, block=False)
-
-
-@tracker.handle()
-async def _handle_track(event: GroupMessageEvent):
-    try:
+@event_preprocessor
+async def _handle_track(event: Event):
+    # 阻断型 matcher 会跳过低优先级 tracker；事件预处理保证每条消息只记一次。
+    if isinstance(event, GroupMessageEvent):
         record_message(event)
-    except Exception:
-        pass
+
+
+@require("nonebot_plugin_apscheduler").scheduler.scheduled_job(
+    "interval", seconds=_FLUSH_INTERVAL, id="luoshu_stats_flush"
+)
+async def _periodic_flush():
+    # 即使最后一条消息后一直没有新消息，也必须在一分钟内落盘。
+    if _dirty:
+        _flush()
 
 
 # ==================== 日期范围 ====================

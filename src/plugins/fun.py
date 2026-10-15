@@ -22,7 +22,7 @@ from nonebot import get_driver, on_command, on_message
 from nonebot.adapters.onebot.v11 import MessageEvent, Bot
 from nonebot.rule import Rule
 
-from .core import log_command, get_role, ROLE_OWNER, _OWNER_QQ
+from .core import log_command, is_familiar
 from .features import guard
 
 # ==================== 「熟人」的称呼 ====================
@@ -46,7 +46,7 @@ _DEFAULT_CALL = SPECIAL_NAMES[0]
 
 def _is_special(event: MessageEvent) -> bool:
     """是否为「洛书熟人」（技术上是管理员）"""
-    return str(event.get_user_id()) in _OWNER_QQ
+    return is_familiar(event)
 
 
 # ==================== 打招呼 ====================
@@ -162,13 +162,12 @@ special_cmd = on_command(
 
 @special_cmd.handle()
 async def _handle_special_cmd(bot: Bot, event: MessageEvent):
-    role = await get_role(bot, event)
-    if role < ROLE_OWNER:
+    if not is_familiar(event):
         await special_cmd.finish("这是洛书的一点小心事…还是不给你看啦~")
 
     log_command("心事卡", event)
     names = " / ".join(SPECIAL_NAMES)
-    qqs = ", ".join(_OWNER_QQ) if _OWNER_QQ else "（未配置）"
+    qqs = event.get_user_id()
     await special_cmd.finish(
         "💭 洛书的一点小心事\n"
         f"  名字：{names}\n"
