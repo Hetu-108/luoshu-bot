@@ -67,6 +67,8 @@ TOGGLEABLE = [
      "desc": "/reset 清空你与 AI 的对话记忆"},
     {"key": "history", "name": "对话历史", "aliases": ["history", "历史"],
      "desc": "/history 查看已记录轮数"},
+    {"key": "profile", "name": "用户记忆", "aliases": ["称呼", "备注", "资料", "用户记忆", "我是谁"],
+     "desc": "/称呼 /备注 /资料 —— 记住每个人的称呼与说明，让对话更贴合对方"},
     # ---- 娱乐 ----
     {"key": "draw", "name": "抽签", "aliases": ["抽签", "求签", "签"],
      "desc": "/抽签 抽一支今日心情签"},
@@ -192,7 +194,7 @@ def _status_lines(group_id: Optional[int]) -> list:
     # 按 TOGGLEABLE 中的顺序分组，用 name 前缀判断过于脆弱，
     # 这里直接按 key 在注册表中的顺序线性展示，用分隔线区分 AI/娱乐/管理/心动。
     groups = [
-        ("AI 对话", ["ai", "switch", "persona", "reset", "history"]),
+        ("AI 对话", ["ai", "switch", "persona", "reset", "history", "profile"]),
         ("娱乐", ["draw", "luck", "tarot"]),
         ("群管理", ["stats", "keywords", "keyword_reply", "ban", "whiteboard"]),
         ("通知", ["poke", "welcome", "farewell"]),

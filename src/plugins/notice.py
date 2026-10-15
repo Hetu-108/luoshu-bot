@@ -47,17 +47,16 @@ poke = on_notice(rule=poke_checker() & guard("poke"), priority=0, block=True)
 @poke.handle()
 async def _handle_poke(event: PokeNotifyEvent):
     msgs = [
-        "你再戳！",
-        "？再戳试试？",
-        "别戳了别戳了再戳就坏了555",
-        "我爪巴爪巴，球球别再戳了",
-        "那...那里...那里不能戳...",
-        "(。´・ω・)ん?",
-        "有事儿你叫我，别天天一个劲戳戳戳！",
-        "欸很烦欸！你戳🔨呢",
-        "差不多得了😅",
-        "我希望你耗子尾汁",
-        "戳我也不会对你好的",
+        "有事说事，别戳。",
+        "别戳。",
+        "……说正事。",
+        "戳我做什么。",
+        "手很闲？",
+        "嗯？有事就说。",
+        "戳坏了你赔？",
+        "有话说，没话别戳。",
+        "再戳也是这个答案。",
+        "别戳了，看见你了。",
     ]
     await poke.finish(random.choice(msgs), at_sender=True)
 

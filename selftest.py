@@ -182,6 +182,15 @@ async def main():
     await send("/功能 重置", as_admin=True, note="恢复本群默认")
     await send("今日人品", note="重置后裸触发也应恢复")
 
+    print("\n========== 用户记忆（称呼 / 备注 / 资料）==========")
+    await send("/资料", user_id=77777770, note="全新用户：应提示还没有记录")
+    await send("/称呼 小测", note="设置称呼（应记住）")
+    await send("/备注 我是自检脚本，喜欢天文", note="设置备注（应记住）")
+    await send("/资料", note="应能看到昵称、称呼、备注、互动次数")
+    await send("/称呼 清除", note="取消自定义称呼")
+    await send("/忘掉我", note="清除本人的全部资料")
+    await send("/资料", note="清除后应提示没有记录")
+
     print("\n========== AI 对话 ==========")
     await send("你好呀，简单介绍一下你自己，一句话", at_bot=True, note="F-13 普通成员 @我")
     await asyncio.sleep(3.5)  # 等过冷却
@@ -189,6 +198,13 @@ async def main():
     await send("/人设")
     await send(f"{CRUSH1} 今天过得怎么样", at_bot=True, note="熟人对话（语气比平时亲近一点，不暧昧、不叫主人）")
     await asyncio.sleep(3.5)
+
+    print("\n========== 人格切换（督师）==========")
+    print("  （验证「洛书」是默认主体，督师只是可切换的人格）")
+    await send("/切换 督师", note="切到督师人格")
+    await send("洛书 用一句话介绍下天文协会", at_bot=True, note="督师口吻应答（讲得明白、不堆术语）")
+    await asyncio.sleep(3.5)
+    await send("/切换 洛书", note="切回默认人格「洛书」")
 
     print("\n=== 自检完成，以上若无 [异常] 即为通过 ===")
 

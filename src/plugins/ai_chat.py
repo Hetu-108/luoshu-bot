@@ -13,6 +13,8 @@
 #   /model <模型名>     → 切换使用的模型（仅管理员）
 #
 # 记忆按「用户 + 群」隔离，持久化到 data/ai_sessions.json
+# 「在跟谁说话」的用户资料（昵称 / 称呼 / 备注）见 user_profile.py，
+# 每次对话前自动注入提示词，让每个人的对话可以定制化。
 # 输入输出均做敏感词过滤（见 security.py）
 import json
 import os
@@ -32,6 +34,7 @@ from .personas import PERSONAS, DEFAULT_PERSONA
 from .core import check_cooldown, log_command, log_event, notify_owner, _OWNER_QQ
 from .security import has_sensitive, filter_text
 from .features import guard
+from .user_profile import touch as _touch_profile, prompt_block as _profile_block, display_name as _display_name
 
 # ==================== 配置读取 ====================
 driver = get_driver()
@@ -119,6 +122,11 @@ def _session_key(event: MessageEvent, bot: Bot) -> str:
     if isinstance(event, GroupMessageEvent):
         return f"g{event.group_id}-u{event.user_id}"
     return f"p-{event.user_id}"
+
+
+def _event_gid(event: MessageEvent):
+    """取事件所属群号；私聊返回 None"""
+    return event.group_id if isinstance(event, GroupMessageEvent) else None
 
 
 def _get_session(key: str) -> dict:
@@ -303,18 +311,25 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
 
     system_prompt = PERSONAS.get(persona_name, PERSONAS[DEFAULT_PERSONA])
 
+    # 记住「在跟谁说话」：记录对方的昵称 / 群名片 / 互动次数，
+    # 并把已知信息注入提示词 —— /称呼、/备注 设置的内容在这里生效，
+    # 于是每个人和她的对话都是「认得人」的，而不是对着一串 QQ 号瞎聊。
+    _gid = _event_gid(event)
+    _touch_profile(event)
+    system_prompt = system_prompt + _profile_block(event.get_user_id(), _gid)
+
     # 对方是「熟人」（.env 的 CRUSH_NAMES，技术上同时是管理员）时，
     # 只做一点轻微的语气微调：比对别人稍微放松、亲近一点即可。
     # 注意：不要写成「心动 / 暗恋」那种暧昧人设——那会让她说话明显过了。
     if _is_master(event):
-        _who = event.sender.card or event.sender.nickname or _CRUSH_NAME
+        _who = _display_name(event.get_user_id(), _gid) or _CRUSH_NAME
         master_note = (
             f"\n\n【语气微调】正在和你说话的是「{_who}」，是和你比较熟的朋友。"
             "和 TA 说话可以比对别人稍微放松、亲近一点点：少一分客套，"
             "多一分自然的关心，语气更随意一些。"
             "但仅此而已——不要刻意撒娇卖萌，不要说肉麻的话，"
             "不要暗示心动、暧昧或恋爱，也不要有任何表白的意味。"
-            "整体还是平时那个安静、慢热的你，只是和 TA 聊天时更自在一点。"
+            "整体还是平时那个清冷、话少的你，只是和 TA 聊天时更自在一点。"
         )
         system_prompt = system_prompt + master_note
 
