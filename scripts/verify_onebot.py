@@ -141,7 +141,7 @@ async def main():
                 report_path.parent.mkdir(parents=True, exist_ok=True)
                 (report_path.parent / 'onebot-probe-server.log').write_text((data / 'server.log').read_text(errors='replace'), encoding='utf-8')
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(json.dumps(report, ensure_ascii=False))
+    print(json.dumps(report))
 
 
 asyncio.run(main())
