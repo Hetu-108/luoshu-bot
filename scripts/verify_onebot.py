@@ -37,11 +37,35 @@ async def main():
         # NoneBot reads custom fields only when they also occur in a dotenv file.
         profile = 'probe-' + uuid.uuid4().hex
         env['ENVIRONMENT'] = profile
+        cloud_server = None
+        cloud_requests = []
+        if os.environ.get('PROBE_CLOUD') == '1':
+            async def cloud_mock(reader, writer):
+                try:
+                    head = (await reader.readuntil(b'\r\n\r\n')).decode('ascii')
+                    headers = dict(line.split(':', 1) for line in head.split('\r\n')[1:] if ':' in line)
+                    headers = {key.lower(): value.strip() for key, value in headers.items()}
+                    assert head.startswith('POST /v1/chat/completions ')
+                    assert headers['authorization'] == 'Bearer probe-cloud-key'
+                    payload = json.loads(await reader.readexactly(int(headers['content-length'])))
+                    cloud_requests.append(payload)
+                    body = json.dumps({'choices': [{'message': {'content': '云端模拟回复'}}]}).encode()
+                    writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: '
+                                 + str(len(body)).encode() + b'\r\n\r\n' + body)
+                    await writer.drain()
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+            cloud_server = await asyncio.start_server(cloud_mock, '127.0.0.1', 0)
+            cloud_port = cloud_server.sockets[0].getsockname()[1]
+            env.update(CLOUD_ENABLED='true', CLOUD_BASE_URL=f'http://127.0.0.1:{cloud_port}/v1',
+                       CLOUD_API_KEY='probe-cloud-key', CLOUD_MODEL='cloud-probe', AI_DEFAULT_BACKEND='ollama')
         dotenv = root / ('.env.' + profile)
         dotenv.write_text('\n'.join(key + '=' + env[key] for key in (
             'DATA_DIR', 'FAMILIAR_USERS', 'GREETING_ENABLED', 'QUIZ_CLOUD_ENABLED',
             'OLLAMA_URL', 'OLLAMA_MODEL', 'OLLAMA_THINK', 'AI_DEFAULT_PERSONA',
-            'AI_CONTEXT_SIZE', 'AI_NUM_PREDICT', 'AI_MAX_CONCURRENT', 'ONEBOT_ACCESS_TOKEN')),
+            'AI_CONTEXT_SIZE', 'AI_NUM_PREDICT', 'AI_MAX_CONCURRENT', 'ONEBOT_ACCESS_TOKEN',
+            *(['CLOUD_ENABLED', 'CLOUD_BASE_URL', 'CLOUD_API_KEY', 'CLOUD_MODEL', 'AI_DEFAULT_BACKEND'] if cloud_server else []))),
             encoding='utf-8')
         dotenv.chmod(0o600)
         with (data / 'server.log').open('w', encoding='utf-8') as log:
@@ -122,6 +146,15 @@ async def main():
                     await send('/排行', '1 分', uid=55555555, gid=123456)
                     await send('/导出', '已私聊发送汇总')
                     await send('/识图', '回复一张图片', uid=66666660)
+                    if cloud_server:
+                        await send('/后端 云端', '仅机器人管理员', uid=55555555)
+                        await send('/后端 云端', '当前会话已使用云端API')
+                        await send('/ai 云端请求测试', '云端模拟回复')
+                        await send('/history', '当前后端：云端API')
+                        await send('/后端 本地', '当前会话已使用本地Ollama')
+                        assert len(cloud_requests) == 1 and cloud_requests[0]['model'] == 'cloud-probe'
+                        assert cloud_requests[0]['messages'][-1]['content'] == '云端请求测试'
+                        report['cloud_http_mock_verified'] = True
                     if os.environ.get('PROBE_MODEL') == '1':
                         await send('/ai 请用一句话向新成员问好', '', uid=66666666, timeout=180)
                         session = json.loads((data / 'ai_sessions.json').read_text())
@@ -153,6 +186,9 @@ async def main():
                     worker.cancel()
                     await asyncio.gather(worker, return_exceptions=True)
             finally:
+                if cloud_server:
+                    cloud_server.close()
+                    await cloud_server.wait_closed()
                 dotenv.unlink(missing_ok=True)
                 process.terminate()
                 try:

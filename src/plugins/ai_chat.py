@@ -35,6 +35,7 @@ from .core import check_cooldown, log_command, log_event, notify_owner, is_famil
 from .security import has_sensitive, filter_text
 from .features import guard
 from src.media import download_image
+from src.cloud_api import CloudConfig, complete as cloud_complete
 
 # ==================== 配置读取 ====================
 driver = get_driver()
@@ -53,6 +54,20 @@ AI_NUM_PREDICT = max(1, int(getattr(cfg, "ai_num_predict", 512)))
 _raw_think = str(getattr(cfg, "ollama_think", "auto")).lower()
 _think = {"true": True, "false": False, "auto": None}[_raw_think]
 _inference_slots = asyncio.Semaphore(max(1, int(getattr(cfg, "ai_max_concurrent", 2))))
+DEFAULT_BACKEND = str(getattr(cfg, "ai_default_backend", "ollama")).lower()
+if DEFAULT_BACKEND not in ("ollama", "cloud"):
+    raise ValueError("AI_DEFAULT_BACKEND 只支持 ollama / cloud")
+_cloud_config = CloudConfig(
+    base_url=str(getattr(cfg, "cloud_base_url", "")).strip(),
+    api_key=str(getattr(cfg, "cloud_api_key", "")).strip(),
+    model=str(getattr(cfg, "cloud_model", "")).strip(),
+    enabled=str(getattr(cfg, "cloud_enabled", "false")).lower() in ("true", "1", "yes"),
+    vision=str(getattr(cfg, "cloud_vision_enabled", "false")).lower() in ("true", "1", "yes"),
+    timeout=float(getattr(cfg, "cloud_timeout", 90)),
+    max_tokens=int(getattr(cfg, "cloud_max_tokens", 1024)),
+    token_parameter=str(getattr(cfg, "cloud_token_parameter", "max_tokens")),
+)
+_cloud_slots = asyncio.Semaphore(max(1, int(getattr(cfg, "cloud_max_concurrent", 2))))
 
 # ==================== 会话持久化 ====================
 SESSION_FILE = DATA_DIR / "ai_sessions.json"
@@ -146,8 +161,12 @@ def _get_session(key: str) -> dict:
     import time
 
     if key not in _sessions:
-        _sessions[key] = {"persona": DEFAULT_PERSONA, "model": OLLAMA_MODEL, "history": []}
+        _sessions[key] = {"persona": DEFAULT_PERSONA, "model": OLLAMA_MODEL, "backend": DEFAULT_BACKEND, "history": []}
     sess = _sessions[key]
+    # Existing Ollama histories remain local until an explicit backend switch.
+    sess.setdefault("backend", "ollama")
+    if not sess.get("cloud_model"):
+        sess["cloud_model"] = _cloud_config.model
     sess.setdefault("persona", DEFAULT_PERSONA)
     sess.setdefault("model", OLLAMA_MODEL)
     sess.setdefault("history", [])
@@ -159,6 +178,11 @@ def _get_session(key: str) -> dict:
 # ==================== Ollama 调用 ====================
 # 健康状态用于诊断；请求始终允许重试，连接阶段最多等待 5 秒。
 _ollama_ok: bool = True
+
+
+async def ask_cloud(messages, model):
+    async with _cloud_slots:
+        return _clean_reply(await cloud_complete(messages, model, _cloud_config))
 
 
 async def ask_ollama(
@@ -354,7 +378,8 @@ async def _chat_turn(matcher, bot: Bot, event: MessageEvent, text: str, key: str
         if queued_revision is not None and revision != queued_revision:
             return
         persona_name = sess["persona"]
-        model = sess["model"]
+        backend = sess["backend"]
+        model = sess["cloud_model"] if backend == "cloud" else sess["model"]
         # 快照一份历史副本：后续在锁外调用模型期间，别处可能改写 sess["history"]，
         # 直接引用列表会读到"半新半旧"的数据。这里复制成独立列表再拼消息。
         history: list = list(sess["history"])
@@ -383,6 +408,13 @@ async def _chat_turn(matcher, bot: Bot, event: MessageEvent, text: str, key: str
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(history[-AI_MAX_HISTORY * 2:])
     user_message = {"role": "user", "content": text}
+    if backend == "cloud":
+        try:
+            _cloud_config.require()
+            if image_urls and not _cloud_config.vision:
+                raise RuntimeError("当前云端模型未启用识图，请管理员切换支持图片的模型，或切回本地后端。")
+        except RuntimeError as exc:
+            await matcher.finish(str(exc))
     if image_urls:
         if len(image_urls) > 3:
             await matcher.finish("一次最多发送 3 张图片。")
@@ -392,10 +424,10 @@ async def _chat_turn(matcher, bot: Bot, event: MessageEvent, text: str, key: str
             await matcher.finish("读取图片失败，请重新发送有效图片（每张不超过 8MB）。")
     messages.append(user_message)
 
-    log_command(f"AI对话({persona_name}{'·心动' if _is_master(event) else ''})", event)
+    log_command(f"AI对话({persona_name}·{backend}{'·心动' if _is_master(event) else ''})", event)
 
     try:
-        reply = await ask_ollama(messages, model=model)
+        reply = await ask_cloud(messages, model=model) if backend == "cloud" else await ask_ollama(messages, model=model)
     except RuntimeError as e:
         log_event("AI_ERR", str(e))
         await matcher.finish(str(e))
@@ -611,8 +643,46 @@ async def _handle_history(bot: Bot, event: MessageEvent):
         sess = _get_session(key)
         n = len(sess["history"]) // 2
         persona = sess["persona"]
-        model = sess["model"]
-    await history.finish(f"当前人设：{persona}\n使用模型：{model}\n已记录对话：{n} 轮")
+        backend = sess["backend"]
+        model = sess["cloud_model"] if backend == "cloud" else sess["model"]
+    await history.finish(f"当前人设：{persona}\n当前后端：{'云端API' if backend == 'cloud' else '本地Ollama'}\n使用模型：{model or '未配置'}\n已记录对话：{n} 轮")
+
+
+backend_cmd = on_command("后端", aliases={"backend", "模型后端"}, rule=guard("ai"), priority=5, block=True)
+
+
+@backend_cmd.handle()
+async def _handle_backend(bot: Bot, event: MessageEvent, arg: Message = CommandArg()):
+    key = _session_key(event, bot)
+    name = arg.extract_plain_text().strip().lower()
+    if not name:
+        async with _lock:
+            sess = _get_session(key)
+            backend = sess['backend']
+            model = sess['cloud_model'] if backend == 'cloud' else sess['model']
+        await backend_cmd.finish(f"当前后端：{'云端API' if backend == 'cloud' else '本地Ollama'}\n使用模型：{model or '未配置'}\n"
+                                 "管理员可用 /后端 本地 或 /后端 云端 切换当前会话。切换会清空历史；云端模式会将新消息及本轮图片发送至配置的API。")
+    if not await SUPERUSER(bot, event):
+        await backend_cmd.finish("切换后端仅机器人管理员可用。")
+    target = {'本地': 'ollama', 'local': 'ollama', 'ollama': 'ollama', '云端': 'cloud', 'cloud': 'cloud'}.get(name)
+    if not target:
+        await backend_cmd.finish("用法：/后端 本地，或 /后端 云端。")
+    if target == 'cloud':
+        try:
+            _cloud_config.require()
+        except RuntimeError as exc:
+            await backend_cmd.finish(str(exc))
+    async with _lock:
+        sess = _get_session(key)
+        changed = sess['backend'] != target
+        if changed:
+            sess['backend'] = target
+            sess['history'] = []
+            sess['revision'] += 1
+            _save_sessions()
+    await backend_cmd.finish(f"当前会话已使用{'云端API' if target == 'cloud' else '本地Ollama'}。"
+                             + ("对话历史已清空。" if changed else "后端未变化，历史保留。")
+                             + ("后续消息及本轮图片会发送至配置的云端服务。" if target == 'cloud' else ""))
 
 
 # ==================== 模型切换（仅管理员）====================
@@ -627,7 +697,11 @@ async def _handle_model(bot: Bot, event: MessageEvent, arg: Message = CommandArg
 
     if not name:
         async with _lock:
-            cur = _get_session(key)["model"]
+            sess = _get_session(key)
+            backend = sess['backend']
+            cur = sess['cloud_model'] if backend == 'cloud' else sess['model']
+        if backend == 'cloud':
+            await model_cmd.finish(f"当前后端：云端API\n当前模型：{cur or '未配置'}\n用法：/model 模型名；仅修改当前会话，模型须在配置的API可用。")
         # 顺便查一下本地有哪些模型
         models = await _list_models()
         await model_cmd.finish(
@@ -638,10 +712,11 @@ async def _handle_model(bot: Bot, event: MessageEvent, arg: Message = CommandArg
 
     async with _lock:
         sess = _get_session(key)
-        sess["model"] = name
+        backend = sess['backend']
+        sess['cloud_model' if backend == 'cloud' else 'model'] = name
         sess["revision"] += 1
         _save_sessions()
-    await model_cmd.finish(f"已切换模型为「{name}」（只对你自己生效）")
+    await model_cmd.finish(f"已切换{'云端' if backend == 'cloud' else '本地'}模型为「{name}」（只对当前会话生效）")
 
 
 async def _list_models() -> list:
@@ -665,7 +740,7 @@ async def _check_ollama_on_startup():
     models = await _list_models()
     if not models:
         _ollama_ok = False
-        logger.error(f"[ai_chat] 无法连接本地模型服务 {OLLAMA_URL}，AI 对话将不可用")
+        logger.error(f"[ai_chat] 无法连接本地模型服务 {OLLAMA_URL}，本地后端暂不可用；云端后端独立配置")
         log_event("STARTUP", f"Ollama 连接失败 {OLLAMA_URL}")
         await notify_owner(
             f"启动时连不上本地模型服务（{OLLAMA_URL}）。\n"
