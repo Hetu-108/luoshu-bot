@@ -71,28 +71,33 @@ async def main():
                                 result = {'user_id': 90000, 'nickname': '督师'}
                             elif action == 'get_group_list':
                                 result = [{'group_id': 123456, 'group_name': '模拟群'}]
+                            elif action == 'get_msg':
+                                result = dict(time=int(time.time()), message_type='group', message_id=params['message_id'],
+                                              real_id=params['message_id'], sender={'user_id': 55555555, 'nickname': '测试成员'},
+                                              message=[{'type': 'image', 'data': {'url': os.environ['PROBE_VISION_URL']}}])
                             else:
                                 result = {'message_id': 900000 + len(received)}
                             if action in ('send_private_msg', 'send_group_msg', 'send_msg', 'upload_private_file'):
                                 received.append({'action': action, 'params': params})
                             await ws.send(json.dumps({'status': 'ok', 'retcode': 0, 'data': result, 'echo': request.get('echo')}))
                     worker = asyncio.create_task(respond())
-                    async def send(text, expected, uid=10000000, gid=None, replay=False, timeout=15):
+                    async def send(text, expected, uid=10000000, gid=None, replay=False, timeout=15, segments=None):
                         nonlocal mid
                         if not replay:
                             mid += 1
                         before = len(received)
                         event = dict(time=int(time.time()), self_id=90000, post_type='message', message_id=mid,
                                      message_type='group' if gid else 'private', sub_type='normal' if gid else 'friend',
-                                     user_id=uid, message=[{'type':'text','data':{'text':text}}], raw_message=text,
+                                     user_id=uid, message=segments if segments is not None else [{'type':'text','data':{'text':text}}], raw_message=text,
                                      font=0, sender={'user_id':uid, 'nickname':'测试成员','card':'','role':'member'})
                         if gid:
                             event['group_id'] = gid
                         await ws.send(json.dumps(event))
                         for _ in range(int(timeout * 20)):
-                            if any(expected in json.dumps(row, ensure_ascii=False) for row in received[before:]):
+                            replies = [row for row in received[before:] if 'message' in row['params']]
+                            if any(expected in json.dumps(row['params']['message'], ensure_ascii=False) for row in replies):
                                 report['checks'].append({'input':text[:90], 'expected':expected, 'passed':True})
-                                return
+                                return replies
                             await asyncio.sleep(.05)
                         raise AssertionError(f'{text}: missing {expected}; replies={received[before:]}')
                     await send('/出题', '仅机器人管理员', uid=55555555)
@@ -116,10 +121,27 @@ async def main():
                     await send('/我的成绩', '已结算总分：1', uid=55555555)
                     await send('/排行', '1 分', uid=55555555, gid=123456)
                     await send('/导出', '已私聊发送汇总')
+                    await send('/识图', '回复一张图片', uid=66666660)
                     if os.environ.get('PROBE_MODEL') == '1':
-                        await send('/ai 请用一句话向新成员问好', 'send_msg', uid=66666666, timeout=180)
+                        await send('/ai 请用一句话向新成员问好', '', uid=66666666, timeout=180)
                         session = json.loads((data / 'ai_sessions.json').read_text())
                         assert any(value.get('model') == 'qwen3.5:9b' and value.get('history') for value in session.values())
+                    if os.environ.get('PROBE_VISION_URL'):
+                        image = {'type': 'image', 'data': {'url': os.environ['PROBE_VISION_URL']}}
+                        prompt = '请读取图片中的数字，并描述左右两个形状的颜色和形状。'
+                        report['vision_replies'] = []
+                        for label, text, uid, gid, segments in [
+                            ('command', '/识图 ' + prompt, 66666661, None,
+                             [{'type': 'text', 'data': {'text': '/识图 ' + prompt}}, image]),
+                            ('reply', '/识图 ' + prompt, 66666662, None,
+                             [{'type': 'reply', 'data': {'id': '123'}}, {'type': 'text', 'data': {'text': '/识图 ' + prompt}}]),
+                            ('group_at', prompt, 66666663, 123456,
+                             [{'type': 'at', 'data': {'qq': '90000'}}, {'type': 'text', 'data': {'text': prompt}}, image]),
+                            ('private_image', '', 66666664, None, [image]),
+                        ]:
+                            started = time.monotonic()
+                            replies = await send(text, '42', uid=uid, gid=gid, segments=segments, timeout=240)
+                            report['vision_replies'].append(dict(entry=label, seconds=round(time.monotonic()-started, 3), replies=replies))
                     with closing(sqlite3.connect(data / 'quiz/state.sqlite3')) as db:
                         assert db.execute('SELECT COUNT(*) FROM answers').fetchone()[0] == 1
                         assert db.execute('SELECT SUM(score) FROM answers').fetchone()[0] == 1
