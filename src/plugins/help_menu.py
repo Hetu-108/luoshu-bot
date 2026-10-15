@@ -350,7 +350,7 @@ FEATURES = [
 ]
 
 # 分类顺序
-CATEGORY_ORDER = ["AI 对话", "娱乐", CAT_CRUSH, "管理", CAT_OWNER]
+CATEGORY_ORDER = ["AI 对话", "科普答题", "娱乐", CAT_CRUSH, "管理", CAT_OWNER]
 
 
 def _name_keys(name: str) -> list:
