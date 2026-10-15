@@ -38,6 +38,9 @@ from src.media import download_image
 # ==================== 配置读取 ====================
 driver = get_driver()
 cfg = driver.config
+DEFAULT_PERSONA = str(getattr(cfg, "ai_default_persona", DEFAULT_PERSONA))
+if DEFAULT_PERSONA not in PERSONAS:
+    raise ValueError("AI_DEFAULT_PERSONA 不在可用人设中")
 
 OLLAMA_URL = str(getattr(cfg, "ollama_url", "http://127.0.0.1:11434")).rstrip("/")
 OLLAMA_MODEL = str(getattr(cfg, "ollama_model", "qwen3-vl:4b"))

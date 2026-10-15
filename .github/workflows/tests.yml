@@ -14,3 +14,4 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pytest -q
+      - run: python scripts/verify_onebot.py . onebot-probe.json
