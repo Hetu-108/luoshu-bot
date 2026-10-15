@@ -46,6 +46,40 @@ OLLAMA_TIMEOUT = float(getattr(cfg, "ollama_timeout", 180))
 AI_MAX_HISTORY = int(getattr(cfg, "ai_max_history", 20))
 AI_AT_SENDER = str(getattr(cfg, "ai_at_sender", "false")).lower() in ("true", "1", "yes")
 
+# 每个会话单次回复的生成长度上限（Ollama 的 num_predict，单位 token）。
+# 注意：这道闸**不是用来把人设变话少的**——语气长短靠 personas.py 的提示词控制。
+# 这里只防「模型跑偏写小作文」这种极端情况，阈值给得比较宽松。
+PERSONA_NUM_PREDICT = {
+    "洛书": 300,      # 正常回复 30~100 字，离这个上限还有充足余量
+}
+DEFAULT_NUM_PREDICT = 512   # 助手 / 程序员这类需要长回答的人设不受限
+
+
+def _is_thinking_model(model: str) -> bool:
+    """是否为「先写一大段推理、再写正文」的思考型模型（qwen3 / R1 系等）。
+
+    实测（Ollama 0.40.3 + qwen3-vl:4b）：这类模型的 num_predict 是
+    **连推理一起算**的，且 `think=false`、`/no_think` 都压不住它的推理
+    （稳定产出 350~550 字推理）。此时若把 num_predict 卡到 100，
+    推理就会把额度吃干净，最终发出去的正文是**空字符串**——
+    机器人会突然「不说话」。所以思考型模型一律不设上限。
+    """
+    name = (model or "").lower()
+    return any(k in name for k in ("qwen3", "r1", "reasoner", "thinking", "qwq"))
+
+
+def _num_predict_for(persona_name: str, model: str) -> int:
+    """按人设决定本次的生成长度上限；返回 0 表示不限制。"""
+    if _is_thinking_model(model):
+        return 0
+    return PERSONA_NUM_PREDICT.get(persona_name, DEFAULT_NUM_PREDICT)
+
+
+# 历史记录「语风格版本」。人设语气大改时把这个数字 +1，
+# 旧对话历史会被丢弃 —— 否则模型会照着上一版语气的旧回复模仿，
+# 把新人格一点点带偏（这是人设改了却「没生效」的最常见原因）。
+HISTORY_STYLE_VERSION = 2
+
 # ==================== 会话持久化 ====================
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -138,6 +172,11 @@ def _get_session(key: str) -> dict:
     sess.setdefault("persona", DEFAULT_PERSONA)
     sess.setdefault("model", OLLAMA_MODEL)
     sess.setdefault("history", [])
+    # 人设语气改版后，旧历史里存的是上一版的说话方式，
+    # 模型会照着它模仿，导致新人格「看起来没生效」。这里一次性丢弃。
+    if sess.get("style_v") != HISTORY_STYLE_VERSION:
+        sess["style_v"] = HISTORY_STYLE_VERSION
+        sess["history"] = []
     sess["last_active"] = time.time()  # 每次访问刷新活动时间
     return sess
 
@@ -152,22 +191,30 @@ async def ask_ollama(
     messages: list,
     model: str,
     temperature: float = 0.8,
+    num_predict: int = 0,
 ) -> str:
-    """调用 Ollama /api/chat，返回助手回复文本"""
+    """调用 Ollama /api/chat，返回助手回复文本
+
+    num_predict > 0 时限制本次生成的最大 token 数（超长直接截断），
+    用来兜住「话少」人设的回复长度。
+    """
     global _ollama_ok
     # 已知服务不可用时，直接快速失败，避免每次请求都卡满超时
     if not _ollama_ok:
         raise RuntimeError(
             f"本地模型服务当前不可用（{OLLAMA_URL}）。请启动 Ollama 后稍等片刻再试。"
         )
+    options = {
+        "temperature": temperature,
+        "num_ctx": 4096,
+    }
+    if num_predict > 0:
+        options["num_predict"] = num_predict
     payload = {
         "model": model,
         "messages": messages,
         "stream": False,
-        "options": {
-            "temperature": temperature,
-            "num_ctx": 4096,
-        },
+        "options": options,
     }
     url = f"{OLLAMA_URL}/api/chat"
     try:
@@ -289,16 +336,16 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
     """AI 对话公共逻辑：@触发 / 喊名字 / /ai 命令 共用"""
     text = (text or "").strip()
     if not text:
-        await matcher.finish("想聊什么？直接把内容说出来就行～")
+        await matcher.finish("想聊什么？直接说就行。")
 
     # 冷却防刷屏（F-06）
     if not check_cooldown("ai", event, 3):
-        await matcher.finish("刷得有点快，我这边跟不上啦，缓一下～")
+        await matcher.finish("刷得有点快，缓一下。")
 
     # 输入敏感词过滤（F-13）
     if has_sensitive(text):
         log_event("SAFE", f"AI输入命中敏感词 user={event.get_user_id()}")
-        await matcher.finish("这个话题我不太方便聊哦，我们换个别的吧~")
+        await matcher.finish("这个话题不太方便聊，换个别的吧。")
 
     key = _session_key(event, bot)
     async with _lock:
@@ -325,11 +372,10 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
         _who = _display_name(event.get_user_id(), _gid) or _CRUSH_NAME
         master_note = (
             f"\n\n【语气微调】正在和你说话的是「{_who}」，是和你比较熟的朋友。"
-            "和 TA 说话可以比对别人稍微放松、亲近一点点：少一分客套，"
-            "多一分自然的关心，语气更随意一些。"
-            "但仅此而已——不要刻意撒娇卖萌，不要说肉麻的话，"
-            "不要暗示心动、暧昧或恋爱，也不要有任何表白的意味。"
-            "整体还是平时那个清冷、话少的你，只是和 TA 聊天时更自在一点。"
+            "和 TA 说话可以比对别人稍微放松一点点：少一分客套，语气更随意些。"
+            "但仅此而已——不要刻意撒娇卖萌，不要说肉麻的话，不要暗示心动、暧昧或恋爱，"
+            "不要有任何表白的意味，也不要因为熟就一口气写一大段。"
+            "整体还是平时那个清冷、话不多的你。"
         )
         system_prompt = system_prompt + master_note
 
@@ -340,8 +386,14 @@ async def _do_chat(matcher, bot: Bot, event: MessageEvent, text: str):
 
     log_command(f"AI对话({persona_name}{'·心动' if _is_master(event) else ''})", event)
 
+    _np = _num_predict_for(persona_name, model)
     try:
-        reply = await ask_ollama(messages, model=model)
+        reply = await ask_ollama(messages, model=model, num_predict=_np)
+        # 兜底：长度上限万一被推理过程吃干净，正文就是空的（见 _is_thinking_model）。
+        # 出现空回复时去掉上限重试一次，别让机器人发出空消息。
+        if not reply and _np > 0:
+            log_event("AI_RETRY", f"回复为空，去掉长度上限重试（人设={persona_name}）")
+            reply = await ask_ollama(messages, model=model, num_predict=0)
     except RuntimeError as e:
         log_event("AI_ERR", str(e))
         await matcher.finish(str(e))
@@ -484,7 +536,7 @@ async def _handle_switch(bot: Bot, event: MessageEvent, arg: Message = CommandAr
         sess["history"] = []  # 换人设清空历史，避免人设串味
         _save_sessions()
 
-    await switch.finish(f"好嘞，已切换为「{name}」，之前聊的就不记得啦～")
+    await switch.finish(f"已切换为「{name}」。之前的对话记不清了。")
 
 
 persona_cmd = on_command("人设", aliases={"persona"}, rule=guard("persona"), priority=5, block=True)
@@ -515,7 +567,7 @@ async def _handle_reset(bot: Bot, event: MessageEvent):
         sess = _get_session(key)
         sess["history"] = []
         _save_sessions()
-    await reset.finish("对话记忆已清空，我们重新开始吧～")
+    await reset.finish("对话记忆已清空。")
 
 
 history = on_command("history", aliases={"历史"}, rule=guard("history"), priority=5, block=True)

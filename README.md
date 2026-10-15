@@ -321,7 +321,7 @@ GREETING_ENABLED=true            # 是否开启定时问好
 
 ## 更新日志
 
-各版本的变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。当前版本：**v1.4.0**。
+各版本的变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。当前版本：**v1.4.1**。
 
 ---
 

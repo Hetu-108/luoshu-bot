@@ -164,7 +164,7 @@ special_cmd = on_command(
 async def _handle_special_cmd(bot: Bot, event: MessageEvent):
     role = await get_role(bot, event)
     if role < ROLE_OWNER:
-        await special_cmd.finish("这是洛书的一点小心事…还是不给你看啦~")
+        await special_cmd.finish("这是洛书的一点小心事，不给你看。")
 
     log_command("心事卡", event)
     names = " / ".join(SPECIAL_NAMES)
